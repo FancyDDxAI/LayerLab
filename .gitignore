@@ -1,0 +1,18 @@
+# Built application (shipped via GitHub Releases — far too large for git)
+LayerLab-App/
+dist/
+build/
+*.zip
+
+# Downloaded binaries: Electron runtime, ONNX runtime, AI models
+ort/
+models/
+bg-assets/
+*.onnx
+*.wasm
+
+# Local scratch
+design-preview/
+*.log
+.DS_Store
+Thumbs.db

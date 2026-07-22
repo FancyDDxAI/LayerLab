@@ -1,0 +1,7 @@
+{
+  "name": "layerlab",
+  "productName": "LayerLab",
+  "version": "1.0.0",
+  "description": "LayerLab — offline layers + effects photo editor",
+  "main": "main.js"
+}

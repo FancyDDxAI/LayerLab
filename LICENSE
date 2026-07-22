@@ -1,0 +1,36 @@
+Copyright (c) 2026 FDDX (FancyDDX). All rights reserved.
+
+The source code in this repository is published for reference and transparency only.
+
+You MAY:
+  - view and read the source code
+  - download and use the released application for your own personal or commercial
+    image editing work, including images you sell or publish
+
+You MAY NOT, without prior written permission from the copyright holder:
+  - copy, modify, merge, publish, redistribute, sublicense or sell the source code
+    or any substantial portion of it
+  - create derivative works based on this software
+  - redistribute the released application or repackage it under another name
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS
+
+The released application bundles third-party software which remains under its own
+licence and copyright:
+
+  - Electron .................. MIT License, © Electron contributors
+  - ONNX Runtime Web .......... MIT License, © Microsoft Corporation
+  - IS-Net background model ... via rembg (danielgatis/rembg)
+  - anime-segmentation model .. SkyTNT/anime-segmentation
+
+These components are redistributed in the release build for user convenience. All
+rights in them remain with their respective authors. The terms above apply only to
+the LayerLab source code and application itself.
