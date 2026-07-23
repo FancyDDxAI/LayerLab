@@ -296,12 +296,12 @@
   #filmstrip{flex:none; height:96px; display:flex; align-items:center; gap:10px; padding:10px 12px; overflow-x:auto; overflow-y:hidden;
     background:var(--chrome-bg); border-top:1px solid var(--line)}
   #filmstrip .fsEmpty{color:var(--faint); font-size:12.5px; padding:0 4px}
-  .fsItem{flex:none; width:64px; display:flex; flex-direction:column; align-items:center; gap:5px; cursor:pointer}
-  .fsItem img{width:64px; height:52px; object-fit:cover; border-radius:8px; background:#000;
+  .fsItem{flex:none; display:flex; flex-direction:column; align-items:center; gap:5px; cursor:pointer; max-width:132px}
+  .fsItem img{height:58px; width:auto; max-width:132px; object-fit:contain; border-radius:8px; background:#0d0d0f;
     border:2px solid var(--line); transition:border-color .12s, transform .1s}
   .fsItem:hover img{transform:translateY(-2px)}
   .fsItem.sel img{border-color:var(--accent)}
-  .fsItem span{max-width:64px; font-size:10.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .fsItem span{max-width:132px; font-size:10.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .fsItem.sel span{color:var(--text)}
   .fsItem.hid img{opacity:.35}
   #rail{width:58px; flex:none; background:var(--chrome-bg); border-right:1px solid var(--line);
@@ -1191,13 +1191,11 @@ function glProcess(src, fx, seed, w, h){
 }
 
 /* ---------- rendering ---------- */
-// working margin around the canvas so layers dragged past the edge stay visible (dimmed)
-function docPad(){ return Math.round(Math.max(doc.w,doc.h)*0.16); }
+function docPad(){ return 0; }   // kept for callers; no overflow margin (it hid the real canvas)
 function applyCanvasSize(){
-  const P=docPad();
-  cv.width = doc.w+P*2; cv.height = doc.h+P*2;
-  cv.style.width = (cv.width*viewScale)+'px';
-  cv.style.height = (cv.height*viewScale)+'px';
+  cv.width = doc.w; cv.height = doc.h;
+  cv.style.width = (doc.w*viewScale)+'px';
+  cv.style.height = (doc.h*viewScale)+'px';
 }
 function drawLayer(c2d, l){
   const src = processLayer(l);
@@ -1222,22 +1220,9 @@ function drawLayer(c2d, l){
 function render(){
   if(!doc.w) return;
   applyCanvasSize();
-  const P=docPad();
-  ctx.clearRect(0,0,cv.width,cv.height);
-  ctx.save(); ctx.translate(P,P);
+  ctx.clearRect(0,0,doc.w,doc.h);
   drawDocBg(ctx,doc.w,doc.h);
   for(const l of layers){ if(l.visible) drawLayer(ctx,l); }
-  ctx.restore();
-  // dim everything outside the real canvas so the export area is unmistakable
-  ctx.save();
-  ctx.fillStyle='rgba(0,0,0,.62)';
-  ctx.fillRect(0,0,cv.width,P);
-  ctx.fillRect(0,P+doc.h,cv.width,P);
-  ctx.fillRect(0,P,P,doc.h);
-  ctx.fillRect(P+doc.w,P,P,doc.h);
-  ctx.strokeStyle='rgba(255,255,255,.45)'; ctx.lineWidth=Math.max(1,1/viewScale);
-  ctx.strokeRect(P+0.5,P+0.5,doc.w-1,doc.h-1);
-  ctx.restore();
   drawHandles();
 }
 
@@ -1410,8 +1395,8 @@ window.addEventListener('keydown', e=>{
   }
   if((e.key==='d'||e.key==='D') && (e.ctrlKey||e.metaKey)){ e.preventDefault(); duplicateSel(); return; }
   if(!sel) return;
-  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT') return;
-  if(e.key==='Delete'||e.key==='Backspace'){ removeLayer(sel.id); e.preventDefault(); }
+  if(/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) || e.target.isContentEditable) return;   // don't hijack typing
+  if(e.key==='Delete'){ removeLayer(sel.id); e.preventDefault(); }   // Backspace no longer nukes layers
   if(!e.repeat && (e.key==='ArrowLeft'||e.key==='ArrowRight'||e.key==='ArrowUp'||e.key==='ArrowDown')) pushHistory();
   const step = e.shiftKey?10:1;
   if(e.key==='ArrowLeft'){ sel.x-=step; render(); e.preventDefault(); }
@@ -1432,10 +1417,10 @@ function cloneLayer(src, nameSuffix){
 function fitScaleL(l, frac){ return Math.min(1, (doc.w*frac)/natW(l), (doc.h*frac)/natH(l)); }
 // never let a layer be dragged completely out of sight — always keep a grabbable sliver on canvas
 function clampLayer(l){
-  if(!l || !doc.w) return;
-  const P=docPad();   // keep the layer's centre inside the visible working area (canvas + margin)
-  l.x=Math.max(-P, Math.min(doc.w+P, l.x));
-  l.y=Math.max(-P, Math.min(doc.h+P, l.y));
+  if(!l || !doc.w) return;   // may bleed off-canvas, but always keep a grabbable sliver on screen
+  const w=natW(l)*l.scale/2, h=natH(l)*l.scale/2, keep=44;
+  l.x=Math.max(-w+keep, Math.min(doc.w+w-keep, l.x));
+  l.y=Math.max(-h+keep, Math.min(doc.h+h-keep, l.y));
 }
 function centerLayer(l){ if(!l||!doc.w) return; pushHistory(); l.x=doc.w/2; l.y=doc.h/2; render(); }
 function fitLayerToCanvas(l){ if(!l||!doc.w) return; pushHistory(); l.scale=Math.min(doc.w/natW(l), doc.h/natH(l)); l.rot=0; l.x=doc.w/2; l.y=doc.h/2; render(); }
@@ -1709,11 +1694,22 @@ buildPresets();
 
 /* ---------- text / watermark layers ---------- */
 const FONTS=[
-  ['Poppins, "Segoe UI", sans-serif','Sans'],
-  ['Georgia, "Times New Roman", serif','Serif'],
+  ['"Segoe UI", Arial, sans-serif','Segoe UI'],
+  ['Arial, Helvetica, sans-serif','Arial'],
+  ['"Arial Black", "Segoe UI", sans-serif','Arial Black'],
+  ['Verdana, Geneva, sans-serif','Verdana'],
+  ['"Trebuchet MS", "Segoe UI", sans-serif','Trebuchet'],
+  ['Tahoma, Geneva, sans-serif','Tahoma'],
+  ['"Times New Roman", Times, serif','Times New Roman'],
+  ['Georgia, "Times New Roman", serif','Georgia'],
+  ['"Palatino Linotype", "Book Antiqua", Palatino, serif','Palatino'],
+  ['"Bahnschrift", "DIN", "Segoe UI", sans-serif','Bahnschrift'],
   ['Impact, Haettenschweiler, sans-serif','Impact'],
-  ['"Courier New", monospace','Mono'],
-  ['"Brush Script MT","Segoe Script",cursive','Script'],
+  ['"Comic Sans MS", "Comic Sans", cursive','Comic Sans'],
+  ['"Courier New", Courier, monospace','Courier New'],
+  ['Consolas, "Lucida Console", monospace','Consolas'],
+  ['"Brush Script MT", "Segoe Script", cursive','Brush Script'],
+  ['"Ink Free", "Segoe Script", cursive','Ink Free'],
 ];
 function defText(){ return { str:'Your text', font:FONTS[0][0], size:120, color:'#ffffff',
   bold:true, italic:false, align:'center', outline:0, outlineColor:'#000000', shadow:0, bg:'' }; }
