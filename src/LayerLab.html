@@ -425,6 +425,18 @@
   .bwThumb:hover{transform:translateY(-2px)}
   .layer{transition:background .12s ease, border-color .12s ease, transform .1s ease}
   #zoombar button:active{transform:translateY(1px)}
+  /* ---- export popover ---- */
+  #exportPop{position:fixed; top:50px; right:14px; z-index:80; width:270px; display:none;
+    background:var(--surface3); border:1px solid var(--line2); border-radius:13px; padding:15px; box-shadow:0 18px 52px -12px rgba(0,0,0,.75)}
+  #exportPop.on{display:block; animation:popIn .14s ease}
+  #exportPop .epTitle{font:600 15px var(--ui); color:var(--text); margin:0 0 13px}
+  #exportPop .eprow{display:flex; align-items:center; gap:10px; margin-top:11px; font-size:13px; color:var(--muted)}
+  #exportPop .eprow > span:first-child{width:58px; flex:none}
+  #exportPop select{flex:1; min-width:0; background:var(--surface2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px}
+  #exportPop input[type=range]{flex:1}
+  #exportPop .eprow b{width:34px; text-align:right; color:var(--text); font-weight:500}
+  #exportPop .epMeta{display:flex; justify-content:space-between; margin-top:14px; padding-top:12px; border-top:1px solid var(--line); font-size:12.5px; color:var(--faint)}
+  #exportPop .epMeta #expSize{color:var(--text); font-weight:500}
   /* ---- toast ---- */
   #toastEl{position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(12px); z-index:400;
     opacity:0; pointer-events:none; background:var(--surface3); color:var(--text); border:1px solid var(--line2);
@@ -468,7 +480,7 @@
       <button id="openProj" data-ic="batch">Open project…</button>
       <button id="saveProj" data-ic="save">Save project</button>
       <div class="msep"></div>
-      <button id="export" data-ic="download">Export…</button>
+      <button id="mExport" data-ic="download">Export…</button>
     </div>
   </div>
   <div class="menu" data-menu="edit"><span class="mlabel">Edit</span>
@@ -507,6 +519,7 @@
   </div>
   <div class="spacer"></div>
   <div id="docInfo">no image</div>
+  <button id="exportBtn" class="primary" data-ic="download" title="Export your image — pick PNG or JPG, size and quality">Export</button>
   <button id="themeBtn" class="ghost" data-ic="gear" title="Settings — themes, colours, background, export folder"></button>
 </div>
 
@@ -615,17 +628,6 @@
         </div>
       </div>
 
-      <div class="acc" data-acc="export">
-        <div class="accHead"><span class="ic" data-ic="download"></span><span class="lbl">Export settings</span><span class="chev" data-ic="chevDown"></span></div>
-        <div class="accBody" style="padding:6px 13px 14px">
-          <div class="arow" style="display:flex;align-items:center;gap:11px;margin-top:10px;font-size:12.5px"><label style="width:82px;flex:none;color:var(--muted)">Format</label>
-            <select id="expFormat" title="PNG keeps transparency and full quality · JPG makes smaller files" style="flex:1;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px"><option value="png">PNG · lossless</option><option value="jpg">JPG · smaller</option></select></div>
-          <div class="arow" id="expQualRow" style="display:none;align-items:center;gap:11px;margin-top:14px;font-size:12.5px"><label style="width:82px;flex:none;color:var(--muted)">Quality</label><input type="range" id="expQual" min="50" max="100" value="92" style="flex:1" title="Higher = better looking but bigger file"><span class="val" id="expQualV" style="width:46px;text-align:right;color:var(--text)">92</span></div>
-          <div class="arow" style="display:flex;align-items:center;gap:11px;margin-top:14px;font-size:12.5px"><label style="width:82px;flex:none;color:var(--muted)">Scale</label>
-            <select id="expScale" title="Export bigger or smaller than the canvas" style="flex:1;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px"><option value="1">1×</option><option value="0.5">0.5×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></div>
-          <div id="expDim" style="font-size:12px;color:var(--faint);text-align:center;margin-top:13px">—</div>
-        </div>
-      </div>
     </div>
     </div>
   </aside>
@@ -755,6 +757,18 @@
   <div id="cpHue"><div id="cpHdot"></div></div>
   <div id="cpRow"><div id="cpPrev"></div><input id="cpHex" spellcheck="false" maxlength="7"></div>
   <div id="cpSwatches"></div>
+</div>
+
+<div id="exportPop">
+  <div class="epTitle">Export image</div>
+  <div class="eprow"><span>Format</span>
+    <select id="expFormat" title="PNG keeps transparency and full quality · JPG makes smaller files"><option value="png">PNG · lossless</option><option value="jpg">JPG · smaller file</option></select></div>
+  <div class="eprow" id="expQualRow" style="display:none"><span>Quality</span>
+    <input type="range" id="expQual" min="50" max="100" value="92" title="Higher = better looking but bigger file"><b id="expQualV">92</b></div>
+  <div class="eprow"><span>Scale</span>
+    <select id="expScale" title="Export bigger or smaller than the canvas"><option value="1">1× (original)</option><option value="0.5">0.5× (half)</option><option value="1.5">1.5×</option><option value="2">2× (double)</option></select></div>
+  <div class="epMeta"><span id="expDim">—</span><span id="expSize">—</span></div>
+  <button id="expGo" class="primary" data-ic="download" style="width:100%;margin-top:12px;justify-content:center">Export image</button>
 </div>
 
 <div id="themePop">
@@ -1915,23 +1929,55 @@ stage.addEventListener('wheel', e=>{
 },{passive:false});
 
 /* ---------- export ---------- */
-function expUpdateDim(){ const el=document.getElementById('expDim'); if(!el) return; const s=+document.getElementById('expScale').value; el.textContent = doc.w ? (Math.round(doc.w*s)+' × '+Math.round(doc.h*s)+' px') : '—'; }
-document.getElementById('expFormat').onchange=e=>{ document.getElementById('expQualRow').style.display = e.target.value==='jpg'?'flex':'none'; };
-document.getElementById('expQual').oninput=e=>{ document.getElementById('expQualV').textContent=e.target.value; };
-document.getElementById('expScale').onchange=expUpdateDim;
-document.getElementById('export').onclick=()=>{
-  if(!doc.w){ alert('Add an image first.'); return; }
-  const s=+document.getElementById('expScale').value, fmt=document.getElementById('expFormat').value, q=+document.getElementById('expQual').value/100;
+const exportPop=document.getElementById('exportPop');
+function expFmt(){ return document.getElementById('expFormat').value; }
+function expScaleV(){ return +document.getElementById('expScale').value; }
+function expQualV(){ return +document.getElementById('expQual').value/100; }
+// render the export at the chosen settings — the ONE source of truth for both preview-size and the real export
+function buildExportCanvas(){
+  const s=expScaleV(), fmt=expFmt();
   const W=Math.round(doc.w*s), H=Math.round(doc.h*s);
   const out=document.createElement('canvas'); out.width=W; out.height=H; const octx=out.getContext('2d');
   if(fmt==='jpg'){ octx.fillStyle='#ffffff'; octx.fillRect(0,0,W,H); }   // JPG has no alpha
   octx.save(); octx.scale(s,s); drawDocBg(octx,doc.w,doc.h); for(const l of layers){ if(l.visible) drawLayer(octx,l); } octx.restore();
+  return {out, W, H, fmt};
+}
+function fmtBytes(n){ if(n<1024) return n+' B'; if(n<1048576) return (n/1024).toFixed(0)+' KB'; return (n/1048576).toFixed(1)+' MB'; }
+function expUpdateDim(){ const el=document.getElementById('expDim'); if(!el) return; const s=expScaleV(); el.textContent = doc.w ? (Math.round(doc.w*s)+' × '+Math.round(doc.h*s)+' px') : '—'; }
+let _expSizeT=null;
+function expUpdateSize(){
+  const el=document.getElementById('expSize'); if(!el) return;
+  if(!doc.w){ el.textContent='—'; return; }
+  el.textContent='estimating…';
+  clearTimeout(_expSizeT);
+  _expSizeT=setTimeout(()=>{
+    const {out,fmt}=buildExportCanvas();
+    out.toBlob(b=>{ el.textContent = b ? ('~ '+fmtBytes(b.size)) : '—'; }, fmt==='jpg'?'image/jpeg':'image/png', fmt==='jpg'?expQualV():undefined);
+  }, 220);
+}
+function expRefresh(){ expUpdateDim(); expUpdateSize(); }
+function openExport(){
+  if(!doc.w){ alert('Add an image first.'); return; }
+  document.getElementById('expQualRow').style.display = expFmt()==='jpg'?'flex':'none';
+  expRefresh();
+  exportPop.classList.add('on');
+}
+document.getElementById('exportBtn').onclick=e=>{ e.stopPropagation(); exportPop.classList.contains('on') ? exportPop.classList.remove('on') : openExport(); };
+document.getElementById('mExport').onclick=openExport;
+document.addEventListener('pointerdown',e=>{ if(exportPop.classList.contains('on') && e.target.closest && !e.target.closest('#exportPop,#exportBtn')) exportPop.classList.remove('on'); });
+document.getElementById('expFormat').onchange=e=>{ document.getElementById('expQualRow').style.display = e.target.value==='jpg'?'flex':'none'; expRefresh(); };
+document.getElementById('expQual').oninput=e=>{ document.getElementById('expQualV').textContent=e.target.value; expUpdateSize(); };
+document.getElementById('expScale').onchange=expRefresh;
+document.getElementById('expGo').onclick=()=>{
+  if(!doc.w) return;
+  const {out,fmt}=buildExportCanvas();
   const mime=fmt==='jpg'?'image/jpeg':'image/png';
   out.toBlob(async b=>{
     const name='layerlab-'+Date.now()+'.'+(fmt==='jpg'?'jpg':'png');
     const where=await saveBlob(b,name);
-    if(where) toast('Exported to '+where);
-  }, mime, fmt==='jpg'?q:undefined);
+    toast(where ? ('Exported to '+where+' · '+fmtBytes(b.size)) : ('Exported · '+fmtBytes(b.size)));
+  }, mime, fmt==='jpg'?expQualV():undefined);
+  exportPop.classList.remove('on');
 };
 
 /* ---------- save / load project (.json) ---------- */
