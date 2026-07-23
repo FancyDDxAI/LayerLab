@@ -1,5 +1,23 @@
 # Release notes
 
+## v1.0.1 — fixes
+
+Download `LayerLab-v1.0.1-win-x64.zip` → unzip → run `LayerLab.exe`. The full app (Electron, ONNX
+runtime and both AI models) is included; nothing else to install.
+
+- **Export** — restored the prominent Export button on the main workspace, with a popover for format
+  (PNG/JPG), quality and scale, live output dimensions **and a real file-size estimate** before you export.
+- **Canvas size** — removed the dark margin around the canvas that was hiding size changes; the canvas
+  is now exactly your document size and resizing to Story / Square / etc. is immediately visible.
+- **Fonts** — 16 fonts that are actually installed on Windows (Segoe UI, Arial, Georgia, Impact,
+  Courier New and more). The previous build defaulted to a font that isn't present, so only one worked.
+- **Backspace** no longer deletes layers, and is ignored while you're typing in a text box. Use
+  **Delete** to remove a layer.
+- **Filmstrip** thumbnails now match each image's real aspect ratio instead of all being the same box.
+- Layers can be dragged partly off-canvas for bleed, but always keep a grabbable sliver so nothing gets lost.
+
+---
+
 ## v1.0.0 — first public release
 
 The first full release of LayerLab: a complete offline photo editor for AI art and social posts.
