@@ -26,13 +26,26 @@ locally, and the app works with no internet connection at all.
 
 ---
 
-## Quick start
+## Download
 
-1. Download `LayerLab-v1.0.0-win-x64.zip` from [Releases](../../releases).
-2. Unzip it anywhere.
-3. Run **`LayerLab.exe`**.
+### [⬇ Download LayerLab for Windows](../../releases/latest)
 
-No installer, no dependencies, no setup. Delete the folder to uninstall.
+Two ways to get it — both give you the same app:
+
+| | | |
+|---|---|---|
+| **Installer** *(recommended)* | `LayerLab-Setup-x.x.x.exe` | Run it. Adds a Start Menu and desktop shortcut, and a normal entry in *Add or remove programs*. No admin rights needed. |
+| **Portable** | `LayerLab-x.x.x-win-x64.zip` | Unzip anywhere and run `LayerLab.exe`. Nothing is installed — delete the folder to remove it. |
+
+LayerLab is a **normal Windows desktop application**. It is not a website and does not run in a
+browser — you double-click it and a window opens, like any other program. Everything (including the
+AI background remover) runs on your own machine, with no internet connection and no account.
+
+> **Why isn't the `.exe` in the file list above?**
+> GitHub rejects any file over 100 MB in a repository, and `LayerLab.exe` is 225 MB on its own
+> (it embeds the Chromium engine). Like every other desktop app on GitHub, the built application is
+> published on the [Releases](../../releases/latest) page instead, which allows files up to 2 GB.
+> This repository holds the source code.
 
 ---
 
@@ -142,16 +155,24 @@ PNG (lossless) or JPG (with quality control) · 0.5× to 2× scale · live dimen
 
 ## Building from source
 
-The repository holds the source only — the Electron runtime and AI models are large binaries and are
-distributed with the [Releases](../../releases) instead.
+*Only needed if you want to build LayerLab yourself — to use the app, just
+[download it](../../releases/latest).*
+
+The repository holds the source only. The Electron runtime and AI models are large binaries and ship
+with the [Releases](../../releases) instead.
 
 ```powershell
-# preview the UI in a browser (no Electron needed)
-python tools/serve.py     # then open http://localhost:8899
+# 1. assemble the desktop app (downloads Electron, ONNX Runtime and the AI models)
+powershell -ExecutionPolicy Bypass -File scripts\build-app.ps1
+#    -> LayerLab-App\LayerLab.exe
+
+# 2. optional: build the Windows installer (requires Inno Setup 6)
+ISCC.exe /DAppSrc="..\LayerLab-App" scripts\installer.iss
+#    -> dist\LayerLab-Setup-x.x.x.exe
 ```
 
-To assemble the full desktop app, `scripts/build-app.ps1` downloads the Electron runtime, the ONNX
-runtime and the AI models, then wires them together with `src/LayerLab.html`.
+`tools/serve.py` is a development helper for previewing the interface in a browser while working on
+the UI. It is not how the app is run.
 
 ---
 
