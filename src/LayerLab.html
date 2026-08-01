@@ -57,18 +57,11 @@
   button:disabled{opacity:.38; cursor:not-allowed}
   main{flex:1; display:flex; min-height:0}
   #stage{
-    flex:1; display:flex; align-items:center; justify-content:center;
-    overflow:auto; padding:28px; position:relative; background-color:var(--bg);
-    background-image:
-      linear-gradient(45deg,rgba(255,255,255,.018) 25%,transparent 25%),
-      linear-gradient(-45deg,rgba(255,255,255,.018) 25%,transparent 25%),
-      linear-gradient(45deg,transparent 75%,rgba(255,255,255,.018) 75%),
-      linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.018) 75%);
-    background-size:24px 24px; background-position:0 0,0 12px,12px -12px,-12px 0;
+    flex:1; position:relative; overflow:hidden; min-width:0; min-height:0;
+    background-color:var(--bg);
   }
-  #canvasWrap{position:relative; line-height:0; border-radius:3px;
-    box-shadow:0 10px 34px -14px rgba(0,0,0,.7), 0 0 0 1px var(--line)}
-  #view{display:block; touch-action:none; cursor:default; max-width:none}
+  #canvasWrap{position:absolute; inset:0; line-height:0}
+  #view{display:block; width:100%; height:100%; touch-action:none; cursor:default}
   #empty{
     position:absolute; inset:0; display:flex; flex-direction:column; gap:10px;
     align-items:center; justify-content:center; color:var(--muted); text-align:center;
@@ -1195,11 +1188,31 @@ function glProcess(src, fx, seed, w, h){
 }
 
 /* ---------- rendering ---------- */
-function docPad(){ return 0; }   // kept for callers; no overflow margin (it hid the real canvas)
+/* ---------- viewport: the canvas is the whole stage; the document lives inside it ----------
+   This is what gives full freedom — layers can sit anywhere, on or off the document,
+   and stay visible. Pan with space-drag or middle mouse, zoom to the cursor.        */
+function docPad(){ return 0; }                 // legacy callers
+const VIEW = { panX:0, panY:0 };
+function d2sx(x){ return x*viewScale + VIEW.panX; }   // document -> screen
+function d2sy(y){ return y*viewScale + VIEW.panY; }
+let _checker=null;
+function checkerPattern(){
+  if(_checker) return _checker;
+  const c=document.createElement('canvas'); c.width=c.height=16; const g=c.getContext('2d');
+  g.fillStyle='#141416'; g.fillRect(0,0,16,16);
+  g.fillStyle='#1c1c20'; g.fillRect(0,0,8,8); g.fillRect(8,8,8,8);
+  _checker=ctx.createPattern(c,'repeat'); return _checker;
+}
 function applyCanvasSize(){
-  cv.width = doc.w; cv.height = doc.h;
-  cv.style.width = (doc.w*viewScale)+'px';
-  cv.style.height = (doc.h*viewScale)+'px';
+  const w=Math.max(1, stage.clientWidth), h=Math.max(1, stage.clientHeight);
+  if(cv.width!==w || cv.height!==h){ cv.width=w; cv.height=h; }
+  if(hUI.width!==w || hUI.height!==h){ hUI.width=w; hUI.height=h; }
+  hUI.style.width=w+'px'; hUI.style.height=h+'px';
+}
+function centerView(){
+  if(!doc.w) return;
+  VIEW.panX=Math.round((stage.clientWidth - doc.w*viewScale)/2);
+  VIEW.panY=Math.round((stage.clientHeight - doc.h*viewScale)/2);
 }
 function drawLayer(c2d, l){
   const src = processLayer(l);
@@ -1222,11 +1235,32 @@ function drawLayer(c2d, l){
   c2d.restore();
 }
 function render(){
-  if(!doc.w) return;
   applyCanvasSize();
-  ctx.clearRect(0,0,doc.w,doc.h);
+  ctx.clearRect(0,0,cv.width,cv.height);
+  if(!doc.w){ drawHandles(); return; }
+  const X=d2sx(0), Y=d2sy(0), W=doc.w*viewScale, H=doc.h*viewScale;
+  // the document "page": drop shadow, then transparency checker at constant screen size
+  ctx.save();
+  ctx.shadowColor='rgba(0,0,0,.55)'; ctx.shadowBlur=26; ctx.shadowOffsetY=8;
+  ctx.fillStyle='#0b0b0d'; ctx.fillRect(X,Y,W,H);
+  ctx.restore();
+  ctx.save();
+  ctx.beginPath(); ctx.rect(X,Y,W,H); ctx.clip();
+  ctx.fillStyle=checkerPattern(); ctx.fillRect(X,Y,W,H);
+  ctx.restore();
+  // document content — layers are NOT clipped, so anything off the page stays visible
+  ctx.save();
+  ctx.translate(VIEW.panX, VIEW.panY); ctx.scale(viewScale, viewScale);
+  ctx.save(); ctx.beginPath(); ctx.rect(0,0,doc.w,doc.h); ctx.clip();
   drawDocBg(ctx,doc.w,doc.h);
+  ctx.restore();
   for(const l of layers){ if(l.visible) drawLayer(ctx,l); }
+  ctx.restore();
+  // page outline so you always know what will export
+  ctx.save();
+  ctx.strokeStyle='rgba(255,255,255,.42)'; ctx.lineWidth=1;
+  ctx.strokeRect(X+0.5, Y+0.5, W-1, H-1);
+  ctx.restore();
   drawHandles();
 }
 
@@ -1236,15 +1270,12 @@ wrap.appendChild(hUI);
 const hctx = hUI.getContext('2d');
 
 function drawHandles(){
-  const P=docPad();
-  hUI.width = cv.width*viewScale; hUI.height = cv.height*viewScale;
-  hUI.style.width = (cv.width*viewScale)+'px'; hUI.style.height=(cv.height*viewScale)+'px';
   hctx.clearRect(0,0,hUI.width,hUI.height);
   if(typeof drawLassoOverlay==='function') drawLassoOverlay();
   if(typeof drawCropOverlay==='function') drawCropOverlay();
   if(curTool==='lasso'||curTool==='crop') return;   // hide transform handles while cutting/cropping
   if(!sel || !sel.visible) return;
-  const c = corners(sel).map(p=>({x:(p.x+P)*viewScale,y:(p.y+P)*viewScale}));
+  const c = corners(sel).map(p=>({x:d2sx(p.x), y:d2sy(p.y)}));
   hctx.strokeStyle='#a855f7'; hctx.lineWidth=1.5;
   hctx.beginPath();
   hctx.moveTo(c[0].x,c[0].y);
@@ -1253,7 +1284,7 @@ function drawHandles(){
   hctx.fillStyle='#fff'; hctx.strokeStyle='#8b5cf6';
   for(const p of c){ hctx.beginPath(); hctx.arc(p.x,p.y,5,0,7); hctx.fill(); hctx.stroke(); }
   const tm = {x:(c[0].x+c[1].x)/2, y:(c[0].y+c[1].y)/2};
-  const rp = rotHandleFix(sel); const rpv={x:(rp.x+P)*viewScale,y:(rp.y+P)*viewScale};
+  const rp = rotHandleFix(sel); const rpv={x:d2sx(rp.x), y:d2sy(rp.y)};
   hctx.beginPath(); hctx.moveTo(tm.x,tm.y); hctx.lineTo(rpv.x,rpv.y); hctx.stroke();
   hctx.fillStyle='#a855f7'; hctx.beginPath(); hctx.arc(rpv.x,rpv.y,6,0,7); hctx.fill();
   hctx.strokeStyle='#fff'; hctx.stroke();
@@ -1284,8 +1315,8 @@ function rotHandleFix(l){
 
 /* ---------- coordinate helpers ---------- */
 function toDoc(e){
-  const r = cv.getBoundingClientRect(), P=docPad();
-  return { x:(e.clientX-r.left)/viewScale - P, y:(e.clientY-r.top)/viewScale - P };
+  const r = cv.getBoundingClientRect();
+  return { x:(e.clientX-r.left-VIEW.panX)/viewScale, y:(e.clientY-r.top-VIEW.panY)/viewScale };
 }
 function localOf(l,p){
   const dx=p.x-l.x, dy=p.y-l.y, cos=Math.cos(-l.rot), sin=Math.sin(-l.rot);
@@ -1302,7 +1333,16 @@ function hitLayer(p){
 }
 
 /* ---------- interaction ---------- */
-let drag=null;
+let drag=null, panning=null, spaceDown=false;
+window.addEventListener('keydown',e=>{
+  if(e.code==='Space' && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && !e.target.isContentEditable){
+    if(!spaceDown){ spaceDown=true; cv.style.cursor='grab'; } e.preventDefault();
+  }
+});
+window.addEventListener('keyup',e=>{
+  if(e.code==='Space'){ spaceDown=false; if(!panning) cv.style.cursor=(CEN.on||curTool==='lasso')?'crosshair':'default'; }
+});
+cv.addEventListener('auxclick',e=>{ if(e.button===1) e.preventDefault(); });
 /* ---------- censor brush (mosaic / blur / black bar) ---------- */
 const CEN={ on:false, style:'mosaic', strength:55, brush:90, painting:false, src:null };
 function censorEnsureCanvas(l){
@@ -1402,7 +1442,7 @@ function cropApply(){
 function drawCropOverlay(){
   if(curTool!=='crop' || !CROP.active || !doc.w) return;
   const g=hctx, s=viewScale;
-  const X=CROP.x*s, Y=CROP.y*s, W=CROP.w*s, H=CROP.h*s;
+  const X=d2sx(CROP.x), Y=d2sy(CROP.y), W=CROP.w*s, H=CROP.h*s;
   g.save();
   g.fillStyle='rgba(0,0,0,.55)';
   g.fillRect(0,0,hUI.width,Y);
@@ -1467,14 +1507,14 @@ function drawLassoOverlay(){
   const g=hctx, s=viewScale;
   g.save();
   g.strokeStyle='#fff'; g.lineWidth=1.6; g.setLineDash([6,4]);
-  g.beginPath(); g.moveTo(LASSO.pts[0].x*s, LASSO.pts[0].y*s);
-  for(let i=1;i<LASSO.pts.length;i++) g.lineTo(LASSO.pts[i].x*s, LASSO.pts[i].y*s);
-  if(!LASSO.drawing || LASSO.mode==='poly') g.lineTo(LASSO.pts[0].x*s, LASSO.pts[0].y*s);
+  g.beginPath(); g.moveTo(d2sx(LASSO.pts[0].x), d2sy(LASSO.pts[0].y));
+  for(let i=1;i<LASSO.pts.length;i++) g.lineTo(d2sx(LASSO.pts[i].x), d2sy(LASSO.pts[i].y));
+  if(!LASSO.drawing || LASSO.mode==='poly') g.lineTo(d2sx(LASSO.pts[0].x), d2sy(LASSO.pts[0].y));
   g.stroke(); g.setLineDash([]);
   g.strokeStyle='rgba(0,0,0,.55)'; g.lineWidth=.9; g.stroke();
   if(LASSO.mode==='poly'){
     g.fillStyle='#fff'; g.strokeStyle='#000'; g.lineWidth=1;
-    LASSO.pts.forEach((p,i)=>{ g.beginPath(); g.arc(p.x*s,p.y*s, i===0?5:3.5, 0, 7); g.fill(); g.stroke(); });
+    LASSO.pts.forEach((p,i)=>{ g.beginPath(); g.arc(d2sx(p.x), d2sy(p.y), i===0?5:3.5, 0, 7); g.fill(); g.stroke(); });
   }
   g.restore();
 }
@@ -1488,6 +1528,11 @@ function censorAt(e){
 
 cv.addEventListener('pointerdown', e=>{
   if(!doc.w) return;
+  if(e.button===1 || spaceDown){        // middle mouse or space = pan the view
+    e.preventDefault(); cv.setPointerCapture(e.pointerId);
+    panning={ sx:e.clientX, sy:e.clientY, px:VIEW.panX, py:VIEW.panY };
+    cv.style.cursor='grabbing'; return;
+  }
   if(CEN.on){
     if(!sel){ alert('Select a layer to censor.'); return; }
     cv.setPointerCapture(e.pointerId);
@@ -1530,6 +1575,7 @@ cv.addEventListener('pointerdown', e=>{
   else { sel=null; drag=null; buildList(); buildAdjust(); render(); }
 });
 cv.addEventListener('pointermove', e=>{
+  if(panning){ VIEW.panX=panning.px+(e.clientX-panning.sx); VIEW.panY=panning.py+(e.clientY-panning.sy); render(); return; }
   if(CEN.on){ if(CEN.painting) censorAt(e); return; }
   if(curTool==='crop'){
     if(CROP.drag) cropDragTo(toDoc(e));
@@ -1546,7 +1592,7 @@ cv.addEventListener('pointermove', e=>{
   if(!drag||!sel) { updateCursor(e); return; }
   _moved=true;
   const p=toDoc(e);
-  if(drag.mode==='move'){ sel.x=p.x-drag.ox; sel.y=p.y-drag.oy; clampLayer(sel); }
+  if(drag.mode==='move'){ sel.x=p.x-drag.ox; sel.y=p.y-drag.oy; }   // no clamping — go anywhere
   else if(drag.mode==='rotate'){
     let deg = Math.atan2(p.x-sel.x, -(p.y-sel.y)) * 180/Math.PI;   // 0 = straight up
     const SNAP=90, THRESH= e.shiftKey?0:1;                          // hold Shift = free (no snap)
@@ -1561,6 +1607,7 @@ cv.addEventListener('pointermove', e=>{
   render();
 });
 cv.addEventListener('pointerup', e=>{
+  if(panning){ panning=null; cv.style.cursor= spaceDown?'grab':((CEN.on||curTool==='lasso')?'crosshair':'default'); return; }
   if(CEN.on){ CEN.painting=false; CEN.src=null; return; }
   if(curTool==='crop'){ CROP.drag=null; return; }
   if(curTool==='lasso'){ if(LASSO.drawing && LASSO.mode==='free'){ LASSO.drawing=false; lassoApply(); } return; }
@@ -2111,15 +2158,22 @@ batchInput.onchange=async ()=>{
 /* ---------- view / zoom ---------- */
 function fitView(){
   if(!doc.w) return;
-  const pad=48, P=docPad();
-  const sw=(stage.clientWidth-pad)/(doc.w+P*2), sh=(stage.clientHeight-pad)/(doc.h+P*2);
-  viewScale=Math.min(1, sw, sh); if(typeof updateZoomLabel==='function') updateZoomLabel(); if(typeof expUpdateDim==='function') expUpdateDim(); render();
+  const pad=64;
+  const sw=(stage.clientWidth-pad)/doc.w, sh=(stage.clientHeight-pad)/doc.h;
+  viewScale=Math.max(0.02, Math.min(1, sw, sh));
+  centerView();
+  if(typeof updateZoomLabel==='function') updateZoomLabel();
+  if(typeof expUpdateDim==='function') expUpdateDim();
+  render();
 }
 document.getElementById('fitBtn').onclick=fitView;
 document.getElementById('resetView').onclick=()=>{ setZoom(1); };
 stage.addEventListener('wheel', e=>{
   if(!doc.w) return;
-  if(e.ctrlKey){ e.preventDefault(); viewScale=Math.min(8,Math.max(0.05, viewScale*(e.deltaY<0?1.1:0.9))); render(); }
+  e.preventDefault();
+  const r=cv.getBoundingClientRect();
+  if(e.shiftKey){ VIEW.panX-=e.deltaY; render(); return; }   // shift+wheel = pan sideways
+  setZoom(viewScale*(e.deltaY<0?1.12:1/1.12), e.clientX-r.left, e.clientY-r.top);
 },{passive:false});
 
 /* ---------- export ---------- */
@@ -2225,7 +2279,7 @@ stage.addEventListener('drop', e=>{
   if(files.length) addOverlays(files);
 });
 
-window.addEventListener('resize', ()=>{ if(doc.w) render(); if(BW.open) bwFit(); });
+window.addEventListener('resize', ()=>{ render(); if(BW.open) bwFit(); });
 
 /* ================= WATERMARK BATCH ================= */
 const BW = { open:false, imgs:[], seli:-1, wm:null, t:{x:0,y:0,w:0,rot:0}, op:0.85, view:1, drag:null, saveDir:null,
@@ -3244,7 +3298,15 @@ document.querySelectorAll('#rail .railBtn[data-act]').forEach(b=>{ b.onclick=()=
 
 /* ---------- floating zoom bar ---------- */
 function updateZoomLabel(){ const z=document.getElementById('zoomVal'); if(z) z.textContent=Math.round(viewScale*100)+'%'; }
-function setZoom(z){ viewScale=Math.min(8,Math.max(0.05,z)); updateZoomLabel(); render(); }
+// zoom keeps the point under the cursor (or the view centre) pinned
+function setZoom(z, sx, sy){
+  const old=viewScale, nz=Math.min(16, Math.max(0.02, z));
+  if(sx===undefined){ sx=stage.clientWidth/2; sy=stage.clientHeight/2; }
+  const dx=(sx-VIEW.panX)/old, dy=(sy-VIEW.panY)/old;
+  viewScale=nz;
+  VIEW.panX=sx-dx*nz; VIEW.panY=sy-dy*nz;
+  updateZoomLabel(); render();
+}
 document.getElementById('zoomIn').onclick=()=>setZoom(viewScale*1.15);
 document.getElementById('zoomOut').onclick=()=>setZoom(viewScale/1.15);
 document.getElementById('cbgType').onchange=e=>{ docBg.type=e.target.value; syncCbgUI(); render(); };
