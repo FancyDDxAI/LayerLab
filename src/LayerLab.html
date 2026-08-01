@@ -533,6 +533,7 @@
   <div id="rail">
     <button class="railBtn on" data-tool="move" data-ic="move" title="Move — move, scale and rotate layers"></button>
     <button class="railBtn" id="cenBtn" data-tool="censor" data-ic="censor" title="Censor — pixelate, blur or black-bar an area"></button>
+    <button class="railBtn" data-tool="lasso" data-ic="lasso" title="Cut — draw freely around anything to cut it out"></button>
     <button class="railBtn" data-tool="canvas" data-ic="crop" title="Canvas size — Instagram, TikTok and more"></button>
     <div class="rsep"></div>
     <button class="railBtn" data-act="addOverlay" data-ic="layer" title="Add an image as a new layer"></button>
@@ -902,6 +903,7 @@ const ICONS={
   send:'<path d="M22 2 11 13M22 2 15 22l-4-9-9-4Z"/>',
   censor:'<rect x="3" y="3" width="7" height="7" rx="1.2"/><rect x="14" y="3" width="7" height="7" rx="1.2"/><rect x="3" y="14" width="7" height="7" rx="1.2"/><rect x="14" y="14" width="7" height="7" rx="1.2"/>',
   move:'<path d="M12 3v18M3 12h18"/><path d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/>',
+  lasso:'<path d="M4.6 15.4A5.4 5.4 0 0 1 3 11.6C3 7.6 7 4.4 12 4.4s9 3.2 9 7.2-4 7.2-9 7.2a11 11 0 0 1-2.6-.3"/><path d="M6.6 17.1c0 1.4-.5 2.4-1.4 2.9a1.7 1.7 0 0 1-2.5-1.5c0-.9.7-1.6 1.6-1.6.9 0 1.6.6 2.3 1.2Z"/>',
   gear:'<circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/>',
   heart:'<path d="M19 14c1.5-1.5 3-3.3 3-5.5A5.5 5.5 0 0 0 12 5.5 5.5 5.5 0 0 0 2 8.5c0 2.2 1.5 4 3 5.5l7 7Z"/>'
 };
@@ -1236,6 +1238,8 @@ function drawHandles(){
   hUI.width = cv.width*viewScale; hUI.height = cv.height*viewScale;
   hUI.style.width = (cv.width*viewScale)+'px'; hUI.style.height=(cv.height*viewScale)+'px';
   hctx.clearRect(0,0,hUI.width,hUI.height);
+  if(typeof drawLassoOverlay==='function') drawLassoOverlay();
+  if(curTool==='lasso') return;                 // hide transform handles while cutting
   if(!sel || !sel.visible) return;
   const c = corners(sel).map(p=>({x:(p.x+P)*viewScale,y:(p.y+P)*viewScale}));
   hctx.strokeStyle='#a855f7'; hctx.lineWidth=1.5;
@@ -1327,6 +1331,49 @@ function censorDab(l, ix, iy, rad){
   g.restore();
   invalidate(l); if(l.type==='text') l._tv=(l._tv||0)+1;
 }
+/* ---------- free-form cut (lasso / polygon) ---------- */
+const LASSO={ mode:'free', action:'keep', feather:0, pts:[], drawing:false };
+function lassoClear(){ LASSO.pts=[]; LASSO.drawing=false; render(); }
+// map a doc-space point onto the selected layer's own pixel grid (handles scale + rotation)
+function lassoToLayer(l,p){ const lp=localOf(l,p); return { x: lp.x/l.scale + natW(l)/2, y: lp.y/l.scale + natH(l)/2 }; }
+function lassoApply(){
+  const l=sel;
+  if(!l){ alert('Select a layer to cut.'); lassoClear(); return; }
+  if(LASSO.pts.length<3){ lassoClear(); return; }
+  pushHistory();
+  censorEnsureCanvas(l);                       // bake the layer into an editable canvas
+  const W=natW(l), H=natH(l);
+  const pts=LASSO.pts.map(p=>lassoToLayer(l,p));
+  const m=document.createElement('canvas'); m.width=W; m.height=H; const mg=m.getContext('2d');
+  if(LASSO.feather>0) mg.filter='blur('+LASSO.feather+'px)';
+  mg.fillStyle='#fff'; mg.beginPath(); mg.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++) mg.lineTo(pts[i].x,pts[i].y);
+  mg.closePath(); mg.fill(); mg.filter='none';
+  const g=srcOf(l).getContext('2d');
+  g.globalCompositeOperation = (LASSO.action==='keep') ? 'destination-in' : 'destination-out';
+  g.drawImage(m,0,0);
+  g.globalCompositeOperation='source-over';
+  invalidate(l); if(l.type==='text') l._tv=(l._tv||0)+1;
+  LASSO.pts=[]; LASSO.drawing=false;
+  buildList(); render();
+  toast(LASSO.action==='keep' ? 'Cut out — kept the shape you drew' : 'Removed the shape you drew');
+}
+function drawLassoOverlay(){
+  if(!LASSO.pts.length) return;
+  const g=hctx, s=viewScale;
+  g.save();
+  g.strokeStyle='#fff'; g.lineWidth=1.6; g.setLineDash([6,4]);
+  g.beginPath(); g.moveTo(LASSO.pts[0].x*s, LASSO.pts[0].y*s);
+  for(let i=1;i<LASSO.pts.length;i++) g.lineTo(LASSO.pts[i].x*s, LASSO.pts[i].y*s);
+  if(!LASSO.drawing || LASSO.mode==='poly') g.lineTo(LASSO.pts[0].x*s, LASSO.pts[0].y*s);
+  g.stroke(); g.setLineDash([]);
+  g.strokeStyle='rgba(0,0,0,.55)'; g.lineWidth=.9; g.stroke();
+  if(LASSO.mode==='poly'){
+    g.fillStyle='#fff'; g.strokeStyle='#000'; g.lineWidth=1;
+    LASSO.pts.forEach((p,i)=>{ g.beginPath(); g.arc(p.x*s,p.y*s, i===0?5:3.5, 0, 7); g.fill(); g.stroke(); });
+  }
+  g.restore();
+}
 function censorAt(e){
   const l=sel; if(!l) return;
   const p=toDoc(e), lp=localOf(l,p);
@@ -1343,6 +1390,20 @@ cv.addEventListener('pointerdown', e=>{
     pushHistory(); censorEnsureCanvas(sel); censorPrep(sel);
     CEN.painting=true; censorAt(e); return;
   }
+  if(curTool==='lasso'){
+    if(!sel){ alert('Select a layer to cut.'); return; }
+    const p=toDoc(e);
+    if(LASSO.mode==='poly'){
+      // click near the first point to close the shape
+      if(LASSO.pts.length>2){
+        const f=LASSO.pts[0];
+        if(Math.hypot(p.x-f.x,p.y-f.y) < 12/viewScale){ lassoApply(); return; }
+      }
+      LASSO.pts.push(p); render(); return;
+    }
+    cv.setPointerCapture(e.pointerId);
+    LASSO.pts=[p]; LASSO.drawing=true; render(); return;
+  }
   cv.setPointerCapture(e.pointerId);
   const p=toDoc(e);
   if(sel && sel.visible){
@@ -1358,6 +1419,13 @@ cv.addEventListener('pointerdown', e=>{
 });
 cv.addEventListener('pointermove', e=>{
   if(CEN.on){ if(CEN.painting) censorAt(e); return; }
+  if(curTool==='lasso'){
+    if(LASSO.drawing && LASSO.mode==='free'){
+      const p=toDoc(e), last=LASSO.pts[LASSO.pts.length-1];
+      if(!last || Math.hypot(p.x-last.x,p.y-last.y) > 2/viewScale){ LASSO.pts.push(p); render(); }
+    }
+    return;
+  }
   if(!drag||!sel) { updateCursor(e); return; }
   _moved=true;
   const p=toDoc(e);
@@ -1375,7 +1443,11 @@ cv.addEventListener('pointermove', e=>{
   }
   render();
 });
-cv.addEventListener('pointerup', e=>{ if(CEN.on){ CEN.painting=false; CEN.src=null; return; } if(drag && _moved && _pending){ pushSnap(_pending); } drag=null; _pending=null; _moved=false; });
+cv.addEventListener('pointerup', e=>{
+  if(CEN.on){ CEN.painting=false; CEN.src=null; return; }
+  if(curTool==='lasso'){ if(LASSO.drawing && LASSO.mode==='free'){ LASSO.drawing=false; lassoApply(); } return; }
+  if(drag && _moved && _pending){ pushSnap(_pending); } drag=null; _pending=null; _moved=false;
+});
 
 function updateCursor(e){
   if(!sel){ cv.style.cursor='default'; return; }
@@ -1392,6 +1464,10 @@ window.addEventListener('keydown', e=>{
   if(!editable && (e.ctrlKey||e.metaKey) && !RSZ.open && !BG.open && !BW.open){
     if((e.key==='z'||e.key==='Z') && !e.shiftKey){ e.preventDefault(); undoMain(); return; }
     if((e.key==='y'||e.key==='Y') || ((e.key==='z'||e.key==='Z') && e.shiftKey)){ e.preventDefault(); redoMain(); return; }
+  }
+  if(!editable && curTool==='lasso' && LASSO.pts.length){
+    if(e.key==='Escape'){ e.preventDefault(); lassoClear(); return; }
+    if(e.key==='Enter' && LASSO.pts.length>2){ e.preventDefault(); lassoApply(); return; }
   }
   if((e.key==='d'||e.key==='D') && (e.ctrlKey||e.metaKey)){ e.preventDefault(); duplicateSel(); return; }
   if(!sel) return;
@@ -2969,12 +3045,13 @@ document.querySelector('aside').addEventListener('pointerdown', e=>{ if(e.target
 function syncCbgUI(){ document.getElementById('cbgType').value=docBg.type; document.getElementById('cbgC1Row').style.display=(docBg.type!=='transparent')?'flex':'none'; document.getElementById('cbgC2Row').style.display=(docBg.type==='gradient')?'flex':'none'; document.getElementById('cbgAngRow').style.display=(docBg.type==='gradient')?'flex':'none'; document.getElementById('cbgC1').value=docBg.c1; document.getElementById('cbgC2').value=docBg.c2; document.getElementById('cbgAng').value=docBg.ang; document.getElementById('cbgAngV').textContent=docBg.ang+'°'; }
 /* ---------- tool system (left column) ---------- */
 let curTool='move';
-const TOOL_META={ move:['move','Move'], censor:['censor','Censor'], canvas:['crop','Canvas size'] };
+const TOOL_META={ move:['move','Move'], censor:['censor','Censor'], lasso:['lasso','Cut'], canvas:['crop','Canvas size'] };
 function setTool(t){
   curTool=t;
   document.querySelectorAll('#rail .railBtn[data-tool]').forEach(b=>b.classList.toggle('on', b.dataset.tool===t));
   CEN.on = (t==='censor');
-  cv.style.cursor = CEN.on ? 'crosshair' : 'default';
+  if(typeof LASSO!=='undefined' && t!=='lasso'){ LASSO.pts=[]; LASSO.drawing=false; }
+  cv.style.cursor = (CEN.on || t==='lasso') ? 'crosshair' : 'default';
   const meta=TOOL_META[t]||['move','Move'];
   const ti=document.querySelector('#optTool .ic'); if(ti){ ti.innerHTML=ic(meta[0],18); }
   const tn=document.getElementById('optToolName'); if(tn) tn.textContent=meta[1];
@@ -2991,6 +3068,17 @@ function buildToolOpts(){
     const st=el.querySelector('#tCenStyle'); st.value=CEN.style; st.onchange=e=>{ CEN.style=e.target.value; };
     const s=el.querySelector('#tCenStr'); s.oninput=e=>{ CEN.strength=+e.target.value; s.nextElementSibling.textContent=e.target.value; };
     const br=el.querySelector('#tCenBrush'); br.oninput=e=>{ CEN.brush=+e.target.value; br.nextElementSibling.textContent=e.target.value; };
+  } else if(curTool==='lasso'){
+    el.innerHTML=`
+      <div class="arow"><label>Shape</label><select id="tLassoMode" title="Freehand: hold the mouse and draw around it. Polygon: click corner by corner, then click the first dot to finish"><option value="free">Freehand</option><option value="poly">Polygon (click points)</option></select></div>
+      <div class="arow"><label>Then</label><select id="tLassoAct" title="Keep what you drew around, or cut it away"><option value="keep">Keep inside</option><option value="remove">Remove inside</option></select></div>
+      <div class="arow"><label>Soft edge</label><input type="range" id="tLassoFeather" min="0" max="30" value="${LASSO.feather}" title="Softens the cut edge so it blends"><span class="val">${LASSO.feather}</span></div>
+      <button id="tLassoCancel" class="tinybtn" data-ic="x" title="Discard the shape you're drawing (Esc)">Cancel shape</button>`;
+    const md=el.querySelector('#tLassoMode'); md.value=LASSO.mode; md.onchange=e=>{ LASSO.mode=e.target.value; lassoClear(); };
+    const ac=el.querySelector('#tLassoAct'); ac.value=LASSO.action; ac.onchange=e=>{ LASSO.action=e.target.value; };
+    const ft=el.querySelector('#tLassoFeather'); ft.oninput=e=>{ LASSO.feather=+e.target.value; ft.nextElementSibling.textContent=e.target.value; };
+    el.querySelector('#tLassoCancel').onclick=lassoClear;
+    paintIcons(el);
   } else if(curTool==='canvas'){
     el.innerHTML=`<div class="arow"><label>Preset</label><select id="tCanvasPreset" title="Pick a platform size for the canvas"></select></div>
       <button id="tApplyCanvas" data-ic="crop" style="width:100%;margin-top:13px" title="Resize the canvas around the centre">Apply size</button>
