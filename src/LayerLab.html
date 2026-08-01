@@ -985,7 +985,7 @@ function loadFile(file){
 
 function newLayer(img, name, over){
   return { id:idc++, img, name, x:doc.w/2, y:doc.h/2, scale:over?fitScale(img,0.6):1, rot:0,
-           opacity:1, blend:'normal', visible:true, adj:defAdj(), fx:defFx(), efx:defEfx(), fxSeed:Math.random()*100, _proc:null, _key:'' };
+           opacity:1, blend:'normal', visible:true, adj:defAdj(), fx:defFx(), efx:defEfx(), fxMix:100, fxSeed:Math.random()*100, _proc:null, _key:'' };
 }
 function fitScale(img, frac){ return Math.min(1, (doc.w*frac)/img.naturalWidth, (doc.h*frac)/img.naturalHeight); }
 
@@ -1017,7 +1017,7 @@ function adjKey(l){
   const a=l.adj;
   return [a.bright,a.contrast,a.sat,a.blur,a.gray,a.sepia,a.hue,a.vignette,a.border,natW(l),l._tv||0].join(',');
 }
-function fxKey(l){ const f=l.fx; return [f.chroma,f.glitch,f.vhs,f.grain,f.leak,f.pixel,f.poster,f.thresh,f.half,f.duo,f.split,f.sharp,f.radial,f.duoA,f.duoB,f.splitS,f.splitH,l.fxSeed].join(','); }
+function fxKey(l){ const f=l.fx; return [f.chroma,f.glitch,f.vhs,f.grain,f.leak,f.pixel,f.poster,f.thresh,f.half,f.duo,f.split,f.sharp,f.radial,f.duoA,f.duoB,f.splitS,f.splitH,l.fxSeed,(l.fxMix===undefined?100:l.fxMix)].join(','); }
 function isDefaultAdj(a){
   return a.bright===100&&a.contrast===100&&a.sat===100&&a.blur===0&&a.gray===0&&a.sepia===0&&a.hue===0&&a.vignette===0&&a.border===0;
 }
@@ -1049,7 +1049,8 @@ function renderAdjCanvas(l){
 // pipeline: raw img -> adjustments (2D) -> fx (WebGL). cached per layer.
 function processLayer(l){
   const adjOn=!isDefaultAdj(l.adj), fxOn=!isDefaultFx(l.fx);
-  if(!adjOn && !fxOn) return srcOf(l);
+  const mix = (l.fxMix===undefined?100:l.fxMix);
+  if((!adjOn && !fxOn) || mix<=0) return srcOf(l);
   const key=adjKey(l)+'|'+fxKey(l);
   if(l._proc && l._key===key) return l._proc;
   const base = adjOn ? renderAdjCanvas(l) : srcOf(l);
@@ -1062,6 +1063,14 @@ function processLayer(l){
       c.getContext('2d').drawImage(gc,0,0);
       result=c;
     }
+  }
+  // master strength — fade the whole treatment back towards the original
+  if(mix<100){
+    const W=natW(l), H=natH(l);
+    const c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d');
+    g.drawImage(srcOf(l),0,0,W,H);
+    g.globalAlpha=mix/100; g.drawImage(result,0,0,W,H); g.globalAlpha=1;
+    result=c;
   }
   l._proc=result; l._key=key;
   return result;
@@ -1350,6 +1359,7 @@ window.addEventListener('keyup',e=>{
   if(e.code==='Space'){ spaceDown=false; if(!panning) cv.style.cursor=(CEN.on||curTool==='lasso')?'crosshair':'default'; }
 });
 cv.addEventListener('auxclick',e=>{ if(e.button===1) e.preventDefault(); });
+cv.addEventListener('contextmenu',e=>{ if(curTool==='removebg') e.preventDefault(); });   // right button = restore brush
 /* ---------- censor brush (mosaic / blur / black bar) ---------- */
 const CEN={ on:false, style:'mosaic', strength:55, brush:90, painting:false, src:null };
 function censorEnsureCanvas(l){
@@ -1381,6 +1391,89 @@ function censorDab(l, ix, iy, rad){
   g.restore();
   invalidate(l); if(l.type==='text') l._tv=(l._tv||0)+1;
 }
+/* ---------- remove background, right here on the canvas ---------- */
+const RBG={ model:'general', soft:1, sharp:0, shift:0, brush:'smart', size:60, tol:45, painting:false, last:null };
+function rbgOpts(){ return { soft:RBG.soft, sharp:RBG.sharp, shift:RBG.shift }; }
+function rbgPristine(l){
+  if(!l._bgOrig){
+    const W=natW(l), H=natH(l);
+    const c=document.createElement('canvas'); c.width=W; c.height=H;
+    c.getContext('2d').drawImage(srcOf(l),0,0,W,H);
+    l._bgOrig=c;
+  }
+  return l._bgOrig;
+}
+function rbgPaintCut(l, cut){
+  const t=srcOf(l), g=t.getContext('2d');
+  g.clearRect(0,0,t.width,t.height);
+  g.drawImage(cut,0,0,t.width,t.height);
+  invalidate(l); if(l.type==='text') l._tv=(l._tv||0)+1;
+  render();
+}
+function rbgReapply(){                     // re-tune the edge without re-running the AI
+  if(!sel||!sel._bgMask) return;
+  rbgPaintCut(sel, bgApplyMask(rbgPristine(sel), sel._bgMask, rbgOpts()));
+}
+async function rbgRun(){
+  if(!sel){ alert('Select a layer first.'); return; }
+  const btn=document.getElementById('rbgGo');
+  try{
+    if(btn){ btn.disabled=true; btn.textContent='Working…'; }
+    pushHistory();
+    censorEnsureCanvas(sel);
+    const src=rbgPristine(sel);
+    let mask;
+    try{ mask=await bgCutoutMask(src, RBG.model); }
+    catch(err){
+      if(err && err.deadMask && RBG.model!=='general'){ toast('That model found nothing — used General instead'); mask=await bgCutoutMask(src,'general'); }
+      else throw err;
+    }
+    sel._bgMask=mask;
+    rbgPaintCut(sel, bgApplyMask(src, mask, rbgOpts()));
+    toast('Background removed');
+  }catch(e){ alert('Background removal failed: '+e.message); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='Remove background'; } buildToolOpts(); }
+}
+function rbgRestoreAll(){
+  if(!sel||!sel._bgOrig) return;
+  pushHistory(); sel._bgMask=null;
+  rbgPaintCut(sel, sel._bgOrig);
+  toast('Original restored');
+}
+// brushing works on the layer itself, exactly like the censor brush
+function rbgDab(l, ix, iy, tool, r, tol){
+  const t=srcOf(l); if(!t.getContext) return;
+  const W=t.width, H=t.height, g=t.getContext('2d');
+  const x0=Math.max(0,Math.floor(ix-r)), y0=Math.max(0,Math.floor(iy-r));
+  const x1=Math.min(W,Math.ceil(ix+r)),  y1=Math.min(H,Math.ceil(iy+r));
+  if(x1<=x0||y1<=y0) return;
+  const bw=x1-x0, bh=y1-y0;
+  const reg=g.getImageData(x0,y0,bw,bh), rd=reg.data;
+  const orig=rbgPristine(l).getContext('2d').getImageData(x0,y0,bw,bh).data;
+  let sr=0,sg=0,sb=0;
+  if(tool==='smart'){
+    const cx=Math.min(W-1,Math.max(0,ix|0)), cy=Math.min(H-1,Math.max(0,iy|0));
+    const s=rbgPristine(l).getContext('2d').getImageData(cx,cy,1,1).data; sr=s[0]; sg=s[1]; sb=s[2];
+  }
+  const r2=r*r, tol2=tol*tol*3;
+  for(let py=0;py<bh;py++)for(let px=0;px<bw;px++){
+    const dx=x0+px-ix, dy=y0+py-iy; if(dx*dx+dy*dy>r2) continue;
+    const i=(py*bw+px)*4;
+    if(tool==='erase') rd[i+3]=0;
+    else if(tool==='restore'){ rd[i]=orig[i]; rd[i+1]=orig[i+1]; rd[i+2]=orig[i+2]; rd[i+3]=orig[i+3]; }
+    else { const a=orig[i]-sr, b=orig[i+1]-sg, cc=orig[i+2]-sb; if(a*a+b*b+cc*cc<=tol2) rd[i+3]=0; }
+  }
+  g.putImageData(reg,x0,y0);
+  invalidate(l); if(l.type==='text') l._tv=(l._tv||0)+1;
+}
+function rbgAt(e, forceRestore){
+  const l=sel; if(!l) return;
+  const p=toDoc(e), lp=localOf(l,p);
+  const ix=lp.x/l.scale + natW(l)/2, iy=lp.y/l.scale + natH(l)/2;
+  rbgDab(l, ix, iy, forceRestore?'restore':RBG.brush, (RBG.size/2)/l.scale, RBG.tol);
+  render();
+}
+
 /* ---------- crop: drag the corners to trim, like a phone editor ---------- */
 const CROP={ x:0, y:0, w:0, h:0, ratio:'free', drag:null, active:false };
 function cropReset(){ if(!doc.w) return; CROP.x=0; CROP.y=0; CROP.w=doc.w; CROP.h=doc.h; CROP.active=true; cropSetRatio(CROP.ratio,true); render(); }
@@ -1546,6 +1639,12 @@ cv.addEventListener('pointerdown', e=>{
     pushHistory(); censorEnsureCanvas(sel); censorPrep(sel);
     CEN.painting=true; censorAt(e); return;
   }
+  if(curTool==='removebg'){
+    if(!sel){ alert('Select a layer first.'); return; }
+    cv.setPointerCapture(e.pointerId);
+    pushHistory(); censorEnsureCanvas(sel); rbgPristine(sel);
+    RBG.painting=true; rbgAt(e, e.button===2); return;
+  }
   if(curTool==='crop'){
     if(!CROP.active) cropReset();
     const p=toDoc(e), m=cropHit(p);
@@ -1583,6 +1682,7 @@ cv.addEventListener('pointerdown', e=>{
 });
 cv.addEventListener('pointermove', e=>{
   if(panning){ VIEW.panX=panning.px+(e.clientX-panning.sx); VIEW.panY=panning.py+(e.clientY-panning.sy); render(); return; }
+  if(curTool==='removebg'){ if(RBG.painting) rbgAt(e, (e.buttons&2)===2); return; }
   if(CEN.on){ if(CEN.painting) censorAt(e); return; }
   if(curTool==='crop'){
     if(CROP.drag) cropDragTo(toDoc(e));
@@ -1615,6 +1715,7 @@ cv.addEventListener('pointermove', e=>{
 });
 cv.addEventListener('pointerup', e=>{
   if(panning){ panning=null; cv.style.cursor= spaceDown?'grab':((CEN.on||curTool==='lasso')?'crosshair':'default'); return; }
+  if(curTool==='removebg'){ RBG.painting=false; return; }
   if(CEN.on){ CEN.painting=false; CEN.src=null; return; }
   if(curTool==='crop'){ CROP.drag=null; return; }
   if(curTool==='lasso'){ if(LASSO.drawing && LASSO.mode==='free'){ LASSO.drawing=false; lassoApply(); } return; }
@@ -1662,7 +1763,7 @@ function cloneLayer(src, nameSuffix){
   const c = { id:idc++, img:src.img, name:src.name+(nameSuffix||' copy'),
            x:src.x, y:src.y, scale:src.scale, rot:src.rot, opacity:src.opacity,
            blend:src.blend, visible:true, adj:Object.assign({},src.adj),
-           fx:Object.assign({},src.fx), efx:Object.assign(defEfx(),src.efx), fxSeed:src.fxSeed, _proc:null, _key:'' };
+           fx:Object.assign({},src.fx), efx:Object.assign(defEfx(),src.efx), fxMix:(src.fxMix===undefined?100:src.fxMix), fxSeed:src.fxSeed, _proc:null, _key:'' };
   if(src.type==='text'){ c.type='text'; c.text=Object.assign({},src.text); renderText(c); }
   return c;
 }
@@ -2240,7 +2341,7 @@ async function saveProject(){
   if(!doc.w){ alert('Nothing to save yet.'); return; }
   const proj={ v:1, doc:{w:doc.w,h:doc.h}, origDoc, docBg, layers:[] };
   for(const l of layers){
-    const b={ name:l.name, x:l.x, y:l.y, scale:l.scale, rot:l.rot, opacity:l.opacity, blend:l.blend, visible:l.visible, adj:l.adj, fx:l.fx, efx:l.efx||defEfx(), fxSeed:l.fxSeed, type:l.type||'image' };
+    const b={ name:l.name, x:l.x, y:l.y, scale:l.scale, rot:l.rot, opacity:l.opacity, blend:l.blend, visible:l.visible, adj:l.adj, fx:l.fx, efx:l.efx||defEfx(), fxMix:(l.fxMix===undefined?100:l.fxMix), fxSeed:l.fxSeed, type:l.type||'image' };
     if(l.type==='text'){ b.text=l.text; } else { const c=document.createElement('canvas'); c.width=l.img.naturalWidth; c.height=l.img.naturalHeight; c.getContext('2d').drawImage(l.img,0,0); b.img=c.toDataURL('image/png'); }
     proj.layers.push(b);
   }
@@ -2257,8 +2358,8 @@ async function loadProject(file){
   layers=[];
   for(const L of proj.layers){
     let l;
-    if(L.type==='text'){ l={ id:idc++, type:'text', name:L.name, x:L.x, y:L.y, scale:L.scale, rot:L.rot, opacity:L.opacity, blend:L.blend, visible:L.visible, adj:Object.assign(defAdj(),L.adj), fx:Object.assign(defFx(),L.fx), efx:Object.assign(defEfx(),L.efx), fxSeed:L.fxSeed, text:L.text, _proc:null, _key:'' }; renderText(l); }
-    else { const img=await loadURL(L.img); l={ id:idc++, img, name:L.name, x:L.x, y:L.y, scale:L.scale, rot:L.rot, opacity:L.opacity, blend:L.blend, visible:L.visible, adj:Object.assign(defAdj(),L.adj), fx:Object.assign(defFx(),L.fx), efx:Object.assign(defEfx(),L.efx), fxSeed:L.fxSeed, _proc:null, _key:'' }; }
+    if(L.type==='text'){ l={ id:idc++, type:'text', name:L.name, x:L.x, y:L.y, scale:L.scale, rot:L.rot, opacity:L.opacity, blend:L.blend, visible:L.visible, adj:Object.assign(defAdj(),L.adj), fx:Object.assign(defFx(),L.fx), efx:Object.assign(defEfx(),L.efx), fxMix:(L.fxMix===undefined?100:L.fxMix), fxSeed:L.fxSeed, text:L.text, _proc:null, _key:'' }; renderText(l); }
+    else { const img=await loadURL(L.img); l={ id:idc++, img, name:L.name, x:L.x, y:L.y, scale:L.scale, rot:L.rot, opacity:L.opacity, blend:L.blend, visible:L.visible, adj:Object.assign(defAdj(),L.adj), fx:Object.assign(defFx(),L.fx), efx:Object.assign(defEfx(),L.efx), fxMix:(L.fxMix===undefined?100:L.fxMix), fxSeed:L.fxSeed, _proc:null, _key:'' }; }
     layers.push(l);
   }
   sel=layers[layers.length-1]||null; emptyEl.style.display=layers.length?'none':'flex';
@@ -3244,14 +3345,14 @@ document.querySelector('aside').addEventListener('pointerdown', e=>{ if(e.target
 function syncCbgUI(){ document.getElementById('cbgType').value=docBg.type; document.getElementById('cbgC1Row').style.display=(docBg.type!=='transparent')?'flex':'none'; document.getElementById('cbgC2Row').style.display=(docBg.type==='gradient')?'flex':'none'; document.getElementById('cbgAngRow').style.display=(docBg.type==='gradient')?'flex':'none'; document.getElementById('cbgC1').value=docBg.c1; document.getElementById('cbgC2').value=docBg.c2; document.getElementById('cbgAng').value=docBg.ang; document.getElementById('cbgAngV').textContent=docBg.ang+'°'; }
 /* ---------- tool system (left column) ---------- */
 let curTool='move';
-const TOOL_META={ move:['move','Move'], censor:['censor','Censor'], crop:['crop','Crop'], lasso:['lasso','Cutout'], canvas:['frame','Canvas size'] };
+const TOOL_META={ move:['move','Move'], censor:['censor','Censor'], crop:['crop','Crop'], lasso:['lasso','Cutout'], canvas:['frame','Canvas size'], removebg:['scissors','Remove background'] };
 function setTool(t){
   curTool=t;
   document.querySelectorAll('#tcList .tcBtn').forEach(b=>b.classList.toggle('on', b.dataset.tool===t));
   CEN.on = (t==='censor');
   if(typeof LASSO!=='undefined' && t!=='lasso'){ LASSO.pts=[]; LASSO.drawing=false; }
   if(typeof CROP!=='undefined'){ if(t==='crop') cropReset(); else { CROP.active=false; CROP.drag=null; } }
-  cv.style.cursor = (CEN.on || t==='lasso') ? 'crosshair' : 'default';
+  cv.style.cursor = (CEN.on || t==='lasso' || t==='removebg') ? 'crosshair' : 'default';
   const meta=TOOL_META[t]||['move','Move'];
   const ti=document.querySelector('#optTool .ic'); if(ti){ ti.innerHTML=ic(meta[0],18); }
   const tn=document.getElementById('optToolName'); if(tn) tn.textContent=meta[1];
@@ -3268,6 +3369,36 @@ function buildToolOpts(){
     const st=el.querySelector('#tCenStyle'); st.value=CEN.style; st.onchange=e=>{ CEN.style=e.target.value; };
     const s=el.querySelector('#tCenStr'); s.oninput=e=>{ CEN.strength=+e.target.value; s.nextElementSibling.textContent=e.target.value; };
     const br=el.querySelector('#tCenBrush'); br.oninput=e=>{ CEN.brush=+e.target.value; br.nextElementSibling.textContent=e.target.value; };
+  } else if(curTool==='removebg'){
+    el.innerHTML=`
+      <button id="rbgGo" class="primary" data-ic="scissors">Remove background</button>
+      <div class="arow"><label>Model</label><select id="rbgModel" title="General suits photos and most pictures · Anime is tuned for illustration"><option value="general">General</option><option value="anime">Anime / illustration</option></select></div>
+      <div class="tcSep" style="margin:16px 0 2px"></div>
+      <div class="arow"><label>Soft edge</label><input type="range" id="rbgSoft" min="0" max="12" value="${RBG.soft}" title="Softens the cut edge — raise it for hair and fur"><span class="val">${RBG.soft}</span></div>
+      <div class="arow"><label>Sharpness</label><input type="range" id="rbgSharp" min="0" max="100" value="${RBG.sharp}" title="Harder, more decisive edge if the cut looks fuzzy"><span class="val">${RBG.sharp}</span></div>
+      <div class="arow"><label>Shrink/Grow</label><input type="range" id="rbgShift" min="-50" max="50" value="${RBG.shift}" title="Pull the edge in to kill halos, or out to keep more of the subject"><span class="val">${RBG.shift}</span></div>
+      <div class="tcSep" style="margin:16px 0 2px"></div>
+      <div class="arow"><label>Brush</label></div>
+      <div class="fxGrid" id="rbgBrushes">
+        <button data-b="smart" title="Samples the colour under the brush, so character lines survive">Erase bg</button>
+        <button data-b="erase" title="Rubs out everything under the brush">Erase</button>
+        <button data-b="restore" title="Paints the original back in">Restore</button>
+      </div>
+      <div class="arow"><label>Size</label><input type="range" id="rbgSize" min="6" max="300" value="${RBG.size}"><span class="val">${RBG.size}</span></div>
+      <div class="arow"><label>Tolerance</label><input type="range" id="rbgTol" min="2" max="140" value="${RBG.tol}" title="How close a colour must be to the sampled background to be erased"><span class="val">${RBG.tol}</span></div>
+      <button id="rbgReset" class="tinybtn" data-ic="reset" style="margin-top:12px">Restore original</button>
+      <div class="grpNote"><b>Right-click drag</b> always restores. Runs on your machine, offline.</div>`;
+    el.querySelector('#rbgGo').onclick=rbgRun;
+    const md=el.querySelector('#rbgModel'); md.value=RBG.model; md.onchange=e=>{ RBG.model=e.target.value; };
+    const bind=(id,key,fn)=>{ const i=el.querySelector(id); i.oninput=e=>{ RBG[key]=+e.target.value; i.nextElementSibling.textContent=e.target.value; if(fn) fn(); }; };
+    bind('#rbgSoft','soft',rbgReapply); bind('#rbgSharp','sharp',rbgReapply); bind('#rbgShift','shift',rbgReapply);
+    bind('#rbgSize','size'); bind('#rbgTol','tol');
+    el.querySelectorAll('#rbgBrushes button').forEach(b=>{
+      b.classList.toggle('primary', b.dataset.b===RBG.brush);
+      b.onclick=()=>{ RBG.brush=b.dataset.b; el.querySelectorAll('#rbgBrushes button').forEach(x=>x.classList.toggle('primary', x.dataset.b===RBG.brush)); };
+    });
+    el.querySelector('#rbgReset').onclick=rbgRestoreAll;
+    paintIcons(el);
   } else if(curTool==='crop'){
     el.innerHTML=`
       <div class="arow"><label>Shape</label><select id="tCropRatio" title="Lock the crop to a shape, or leave it free">
@@ -3355,8 +3486,10 @@ const CATS=[
     { label:'Background',  ic:'image',  panel:'canvasbg' },
   ]},
   { id:'retouch', name:'Retouch', ic:'scissors', tools:[
-    { label:'Remove background', ic:'scissors', act:'bgrBtn' },
+    { label:'Remove background', ic:'scissors', tool:'removebg' },
     { label:'Censor brush',      ic:'censor',   tool:'censor' },
+    { sep:true },
+    { label:'Batch cutouts',     ic:'batch',    act:'bgrBtn' },
   ]},
   { id:'batch', name:'Batch', ic:'batch', tools:[
     { label:'Watermark batch', ic:'mark',  act:'wmBatchBtn' },
@@ -3446,7 +3579,8 @@ function showGroup(grp, label, icon){
   const el=document.getElementById('toolOpts'); el.innerHTML='';
   const ti=document.querySelector('#optTool .ic'); if(ti) ti.innerHTML=ic(icon||'tune',18);
   const tn=document.getElementById('optToolName'); if(tn) tn.textContent=label||'Settings';
-  if(!sel){ el.innerHTML='<div class="grpNote">Select a layer first — pick one on the canvas or in the filmstrip.</div>'; return; }
+  if(!sel && layers.length) sel=layers[layers.length-1];   // don't leave the panel empty
+  if(!sel){ el.innerHTML='<div class="grpNote">Add an image first, then these controls appear here.</div>'; return; }
   const [kind,name]=grp.split(':');
   const def = kind==='adj' ? ADJ_GROUPS[name] : FX_GROUPS[name];
   if(!def) return;
@@ -3462,6 +3596,16 @@ function showGroup(grp, label, icon){
       wrap.appendChild(b);
     });
     el.appendChild(wrap); paintIcons(wrap);
+  }
+  // master strength for the whole treatment on this layer — dial any look up or down
+  if(kind==='fx'){
+    const sr=document.createElement('div'); sr.className='arow'; sr.style.marginTop='16px';
+    const cur=(sel.fxMix===undefined?100:sel.fxMix);
+    sr.innerHTML=`<label style="color:var(--text);font-weight:500">Strength</label><input type="range" min="0" max="100" value="${cur}" title="Fade the whole effect back towards the original picture"><span class="val">${cur}%</span>`;
+    const si=sr.querySelector('input'), so=sr.querySelector('.val');
+    si.oninput=()=>{ sel.fxMix=+si.value; so.textContent=si.value+'%'; invalidate(sel); render(); };
+    el.appendChild(sr);
+    const sep=document.createElement('div'); sep.className='tcSep'; sep.style.margin='14px 0 2px'; el.appendChild(sep);
   }
   const suffixOf=k=>(k==='hue'?'°':(k==='blur'?'px':((k==='bright'||k==='contrast'||k==='sat')?'%':'')));
   (def.adjKeys||def.keys||[]).forEach(k=>{
