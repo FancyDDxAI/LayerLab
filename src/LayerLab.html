@@ -273,18 +273,31 @@
   #docInfo{font:400 12px var(--ui); color:var(--faint); margin-right:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:340px}
   #menubar #themeBtn{padding:9px; border-color:transparent; background:transparent}
   #menubar #themeBtn:hover{background:var(--surface2)}
-  #optbar{display:flex; align-items:center; gap:14px; height:48px; flex:none; padding:0 14px; overflow-x:auto;
-    background:var(--surface2); border-bottom:1px solid var(--line); z-index:10}
-  #optTool{display:flex; align-items:center; gap:8px; font:600 13px var(--ui); color:var(--text); flex:none}
+  /* tool settings now live in the right dock */
+  #optTool{display:flex; align-items:center; gap:9px; padding:15px 15px 0; font:600 14px var(--ui); color:var(--text)}
   #optTool .ic{display:flex; color:var(--accent)}
-  #optbar .osep{width:1px; height:20px; background:var(--line2); flex:none}
-  #optbar #toolOpts{display:flex; align-items:center; gap:16px; margin:0; border:0; padding:0; flex:1}
-  #optbar #toolOpts:empty::after{content:'No options for this tool'; color:var(--faint); font-size:12.5px}
-  #optbar #toolOpts .arow{margin-top:0; gap:9px; flex:none}
-  #optbar #toolOpts .arow label{width:auto; color:var(--muted)}
-  #optbar #toolOpts .arow input[type=range]{width:110px; flex:none}
-  #optbar #toolOpts select{width:auto; min-width:130px}
-  #optbar #toolOpts > div[style*="font-size"]{display:none}
+  #toolOpts{padding:4px 15px 18px; margin:0; border:0}
+  #toolOpts:empty::after{content:'Nothing to set for this one.'; display:block; padding:12px 0; color:var(--faint); font-size:12.5px}
+  #toolOpts .arow{display:flex; align-items:center; gap:11px; margin-top:14px; font-size:12.5px; color:var(--muted)}
+  #toolOpts .arow label{width:82px; flex:none}
+  #toolOpts .arow input[type=range]{flex:1}
+  #toolOpts .arow .val{width:46px; text-align:right; color:var(--text)}
+  #toolOpts select{flex:1; min-width:0; background:var(--surface2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px}
+  #toolOpts > button{width:100%; margin-top:12px; justify-content:center}
+  #toolOpts .fxGrid{display:flex; flex-wrap:wrap; gap:7px; margin-top:6px}
+  #toolOpts .fxGrid button{flex:1 1 calc(50% - 4px); padding:11px 10px; font-size:12.5px}
+  #toolOpts .grpNote{font-size:11.5px; color:var(--faint); line-height:1.6; margin-top:14px}
+  /* tool column beside the category rail */
+  #toolcol{width:186px; flex:none; background:var(--surface); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; min-height:0}
+  #tcHead{padding:15px 15px 10px; font:600 11.5px var(--ui); text-transform:uppercase; letter-spacing:1px; color:var(--muted); flex:none}
+  #tcList{flex:1; min-height:0; overflow:auto; padding:0 9px 12px; display:flex; flex-direction:column; gap:4px}
+  .tcBtn{width:100%; justify-content:flex-start; gap:10px; padding:11px 12px; font-size:13px;
+    background:transparent; border-color:transparent; text-align:left}
+  .tcBtn:hover{background:var(--surface2); border-color:transparent; transform:none}
+  .tcBtn.on{background:var(--accent-tint); border-color:var(--accent)}
+  .tcBtn.on .svg{color:var(--accent); opacity:1}
+  .tcSep{height:1px; background:var(--line); margin:7px 4px; flex:none}
   #centercol{flex:1; display:flex; flex-direction:column; min-width:0; min-height:0}
   #filmstrip{flex:none; height:96px; display:flex; align-items:center; gap:10px; padding:10px 12px; overflow-x:auto; overflow-y:hidden;
     background:var(--chrome-bg); border-top:1px solid var(--line)}
@@ -516,28 +529,11 @@
   <button id="themeBtn" class="ghost" data-ic="gear" title="Settings — themes, colours, background, export folder"></button>
 </div>
 
-<div id="optbar">
-  <div id="optTool"><span class="ic" data-ic="move"></span><span id="optToolName">Move</span></div>
-  <div class="osep"></div>
-  <div id="toolOpts"></div>
-</div>
-
 <main>
-  <div id="rail">
-    <button class="railBtn on" data-tool="move" data-ic="move" title="Move — move, scale and rotate layers"></button>
-    <button class="railBtn" id="cenBtn" data-tool="censor" data-ic="censor" title="Censor — pixelate, blur or black-bar an area"></button>
-    <button class="railBtn" data-tool="crop" data-ic="crop" title="Crop — drag the corners to trim the picture"></button>
-    <button class="railBtn" data-tool="lasso" data-ic="lasso" title="Cutout — draw freely around something to cut it out of a layer"></button>
-    <button class="railBtn" data-tool="canvas" data-ic="frame" title="Canvas size — Instagram, TikTok and more"></button>
-    <div class="rsep"></div>
-    <button class="railBtn" data-act="addOverlay" data-ic="layer" title="Add an image as a new layer"></button>
-    <button class="railBtn" data-act="addText" data-ic="text" title="Add a text layer"></button>
-    <button class="railBtn" data-act="addMark" data-ic="mark" title="Place your watermark"></button>
-    <div class="rsep"></div>
-    <button class="railBtn" data-act="bgrBtn" data-ic="scissors" title="Remove background (AI)"></button>
-    <button class="railBtn" data-act="wmBatchBtn" data-ic="mark" title="Watermark a whole batch"></button>
-    <button class="railBtn" data-act="rszBtn" data-ic="crop" title="Resize a batch to platform sizes"></button>
-    <button class="railBtn" data-act="batchBtn" data-ic="batch" title="Apply a saved look to a folder"></button>
+  <div id="rail"></div>
+  <div id="toolcol">
+    <div id="tcHead">Transform</div>
+    <div id="tcList"></div>
   </div>
 
   <div id="centercol">
@@ -564,12 +560,17 @@
 
   <aside id="dock">
     <div class="dockTabs">
+      <button class="dtab" data-p="tool" title="Settings for the tool you picked">Tool</button>
       <button class="dtab on" data-p="adjust" title="Histogram, layer properties and adjustments">Adjust</button>
       <button class="dtab" data-p="effects" title="One-click effects, saved looks, canvas and export">Effects</button>
       <button class="dtab" data-p="layers" title="Your layer stack">Layers<span class="count" id="lcount">0</span></button>
       <button class="dtab" data-p="history" title="Step back through what you've done">History</button>
     </div>
     <div class="dockBody">
+      <div class="dpanel" data-p="tool">
+        <div id="optTool"><span class="ic" data-ic="move"></span><span id="optToolName">Move</span></div>
+        <div id="toolOpts"></div>
+      </div>
       <div class="dpanel on" data-p="adjust">
         <div id="histoBox">
           <div class="hhead"><span>Histogram</span><span id="histoMode">RGB</span></div>
@@ -3224,7 +3225,7 @@ let curTool='move';
 const TOOL_META={ move:['move','Move'], censor:['censor','Censor'], crop:['crop','Crop'], lasso:['lasso','Cutout'], canvas:['frame','Canvas size'] };
 function setTool(t){
   curTool=t;
-  document.querySelectorAll('#rail .railBtn[data-tool]').forEach(b=>b.classList.toggle('on', b.dataset.tool===t));
+  document.querySelectorAll('#tcList .tcBtn').forEach(b=>b.classList.toggle('on', b.dataset.tool===t));
   CEN.on = (t==='censor');
   if(typeof LASSO!=='undefined' && t!=='lasso'){ LASSO.pts=[]; LASSO.drawing=false; }
   if(typeof CROP!=='undefined'){ if(t==='crop') cropReset(); else { CROP.active=false; CROP.drag=null; } }
@@ -3292,9 +3293,150 @@ function applyCanvasSizePreset(w,h){
   layers.forEach(l=>{ l.x-=offX; l.y-=offY; });
   doc.w=w; doc.h=h; fitView(); render();
 }
-document.querySelectorAll('#rail .railBtn[data-tool]').forEach(b=>{ b.onclick=()=>setTool(b.dataset.tool); });
-// rail shortcuts delegate to the real menu buttons so all existing wiring is reused
-document.querySelectorAll('#rail .railBtn[data-act]').forEach(b=>{ b.onclick=()=>{ const t=document.getElementById(b.dataset.act); if(t) t.click(); }; });
+/* ================= category rail -> tool column -> settings on the right ================= */
+const CATS=[
+  { id:'transform', name:'Transform', ic:'move', tools:[
+    { label:'Move & scale', ic:'move',   tool:'move' },
+    { label:'Crop',         ic:'crop',   tool:'crop' },
+    { label:'Free cut',     ic:'lasso',  tool:'lasso' },
+    { label:'Canvas size',  ic:'frame',  tool:'canvas' },
+    { sep:true },
+    { label:'Resize batch', ic:'crop',   act:'rszBtn' },
+  ]},
+  { id:'adjust', name:'Adjust', ic:'tune', tools:[
+    { label:'Light',   ic:'sun',      grp:'adj:light' },
+    { label:'Colour',  ic:'contrast', grp:'adj:color' },
+    { label:'Detail',  ic:'droplet',  grp:'adj:detail' },
+    { label:'Finish',  ic:'frame',    grp:'adj:finish' },
+  ]},
+  { id:'effects', name:'Effects', ic:'fx', tools:[
+    { label:'Black & white', ic:'contrast', grp:'fx:bw' },
+    { label:'Blur',          ic:'droplet',  grp:'fx:blur' },
+    { label:'Colours',       ic:'palette',  grp:'fx:color' },
+    { label:'Artistic',      ic:'zap',      grp:'fx:art' },
+    { label:'Retro',         ic:'tv',       grp:'fx:retro' },
+    { label:'Light leaks',   ic:'sun',      grp:'fx:light' },
+    { label:'Frames',        ic:'image',    grp:'fx:frame' },
+  ]},
+  { id:'add', name:'Add', ic:'layer', tools:[
+    { label:'Image layer', ic:'layer', act:'addOverlay' },
+    { label:'Text',        ic:'text',  act:'addText' },
+    { label:'Watermark',   ic:'mark',  act:'addMark' },
+    { label:'Duplicate',   ic:'dup',   act:'dupBtn' },
+  ]},
+  { id:'retouch', name:'Retouch', ic:'scissors', tools:[
+    { label:'Remove background', ic:'scissors', act:'bgrBtn' },
+    { label:'Censor brush',      ic:'censor',   tool:'censor' },
+  ]},
+  { id:'batch', name:'Batch', ic:'batch', tools:[
+    { label:'Watermark batch', ic:'mark',  act:'wmBatchBtn' },
+    { label:'Resize batch',    ic:'crop',  act:'rszBtn' },
+    { label:'Apply a look',    ic:'batch', act:'batchBtn' },
+  ]},
+];
+let curCat='transform', curGrp=null;
+function buildRail(){
+  const rail=document.getElementById('rail'); rail.innerHTML='';
+  CATS.forEach(c=>{
+    const b=document.createElement('button');
+    b.className='railBtn'+(c.id===curCat?' on':''); b.dataset.cat=c.id; b.dataset.ic=c.ic;
+    b.dataset.tip=c.name;
+    b.onclick=()=>selectCat(c.id);
+    rail.appendChild(b);
+  });
+  paintIcons(rail);
+}
+function selectCat(id){
+  curCat=id;
+  document.querySelectorAll('#rail .railBtn').forEach(b=>b.classList.toggle('on', b.dataset.cat===id));
+  const cat=CATS.find(c=>c.id===id); if(!cat) return;
+  document.getElementById('tcHead').textContent=cat.name;
+  const list=document.getElementById('tcList'); list.innerHTML='';
+  cat.tools.forEach(t=>{
+    if(t.sep){ const s=document.createElement('div'); s.className='tcSep'; list.appendChild(s); return; }
+    const b=document.createElement('button');
+    b.className='tcBtn'; b.dataset.ic=t.ic; b.appendChild(document.createTextNode(t.label));
+    if(t.tool) b.dataset.tool=t.tool;
+    if(t.grp)  b.dataset.grp=t.grp;
+    b.onclick=()=>{
+      if(t.act){ const el=document.getElementById(t.act); if(el) el.click(); return; }
+      document.querySelectorAll('#tcList .tcBtn').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      if(t.tool){ curGrp=null; setTool(t.tool); showPanel('tool'); }
+      else if(t.grp){ curGrp=t.grp; showGroup(t.grp, t.label, t.ic); showPanel('tool'); }
+    };
+    list.appendChild(b);
+  });
+  paintIcons(list);
+  // reflect whichever tool/group is already live
+  const active=[...list.querySelectorAll('.tcBtn')].find(b=>b.dataset.tool===curTool || b.dataset.grp===curGrp);
+  if(active) active.classList.add('on');
+}
+
+/* grouped adjustment + effect panels (so 22 sliders are never dumped in one list) */
+const ADJ_GROUPS={
+  light:  { keys:['bright','contrast'], fxKeys:[],                note:'Brightness and contrast.' },
+  color:  { keys:['sat','hue','sepia','gray'], fxKeys:[],         note:'Saturation, hue and tone.' },
+  detail: { keys:['blur'], fxKeys:['sharp','radial'],             note:'Sharpen or soften the picture.' },
+  finish: { keys:['vignette','border'], fxKeys:['grain'],         note:'Edges and finishing touches.' },
+};
+const FX_GROUPS={
+  bw:    { fx:['bw'],                 fxKeys:[],                          adjKeys:['gray','contrast','bright'], note:'Drop the colour, then shape the contrast.' },
+  blur:  { fx:[],                     fxKeys:['radial'],                  adjKeys:['blur'],                     note:'Soften everything, or blur outwards from the centre.' },
+  color: { fx:['duotone'],            fxKeys:['duo','split','chroma'],    adjKeys:['hue','sat','sepia'],        note:'Duotone and split tone take two colours each.' },
+  art:   { fx:['halftone','pixelate'],fxKeys:['half','pixel','poster','thresh'], adjKeys:[],                    note:'Print, mosaic and poster looks.' },
+  retro: { fx:['vintage','vhs','glitch'], fxKeys:['vhs','glitch','grain'], adjKeys:['sepia'],                   note:'Tape, film and broken-signal looks.' },
+  light: { fx:['leak'],               fxKeys:['leak'],                    adjKeys:['bright'],                   note:'Warm light spilling into the frame.' },
+  frame: { fx:['polaroid','softbg'],  fxKeys:[],                          adjKeys:['border','vignette'],        note:'Put your picture on a backdrop, or give it a border.' },
+};
+function sliderRow(host, label, get, set, min, max, suffix){
+  const row=document.createElement('div'); row.className='arow';
+  const v=Math.round(get());
+  row.innerHTML=`<label>${label}</label><input type="range" min="${min}" max="${max}" value="${v}"><span class="val">${v}${suffix||''}</span>`;
+  const inp=row.querySelector('input'), out=row.querySelector('.val');
+  inp.oninput=()=>{ set(+inp.value); out.textContent=inp.value+(suffix||''); invalidate(sel); render(); };
+  host.appendChild(row);
+}
+function showGroup(grp, label, icon){
+  const el=document.getElementById('toolOpts'); el.innerHTML='';
+  const ti=document.querySelector('#optTool .ic'); if(ti) ti.innerHTML=ic(icon||'tune',18);
+  const tn=document.getElementById('optToolName'); if(tn) tn.textContent=label||'Settings';
+  if(!sel){ el.innerHTML='<div class="grpNote">Select a layer first — pick one on the canvas or in the filmstrip.</div>'; return; }
+  const [kind,name]=grp.split(':');
+  const def = kind==='adj' ? ADJ_GROUPS[name] : FX_GROUPS[name];
+  if(!def) return;
+  // one-click looks for this group
+  if(def.fx && def.fx.length){
+    const wrap=document.createElement('div'); wrap.className='fxGrid';
+    def.fx.forEach(id=>{
+      const src=document.querySelector('.fx button[data-fx="'+id+'"]'); if(!src) return;
+      const b=document.createElement('button'); b.dataset.ic=src.dataset.ic;
+      b.appendChild(document.createTextNode(src.textContent.trim()));
+      b.dataset.tip=src.dataset.tip||src.getAttribute('title')||'';
+      b.onclick=()=>{ applyFx(id); showGroup(grp,label,icon); };
+      wrap.appendChild(b);
+    });
+    el.appendChild(wrap); paintIcons(wrap);
+  }
+  const suffixOf=k=>(k==='hue'?'°':(k==='blur'?'px':((k==='bright'||k==='contrast'||k==='sat')?'%':'')));
+  (def.adjKeys||def.keys||[]).forEach(k=>{
+    const d=ADJ_DEFS.find(a=>a[0]===k); if(!d) return;
+    sliderRow(el, d[1], ()=>sel.adj[k]||0, v=>{ sel.adj[k]=v; }, d[2], d[3], suffixOf(k));
+  });
+  (def.fxKeys||[]).forEach(k=>{
+    const d=FX_DEFS.find(a=>a[0]===k); if(!d) return;
+    sliderRow(el, d[1], ()=>sel.fx[k]||0, v=>{ sel.fx[k]=v; }, d[2], d[3], '');
+    (FX_COLORS.find(c=>c[0]===k)||[null,[],[]])[1].forEach((ck,i)=>{
+      const labels=FX_COLORS.find(c=>c[0]===k)[2];
+      const r=document.createElement('div'); r.className='arow';
+      r.innerHTML=`<label style="color:var(--faint)">${labels[i]}</label><input type="color" value="${sel.fx[ck]||'#000000'}"><span style="flex:1"></span>`;
+      r.querySelector('input').oninput=e=>{ sel.fx[ck]=e.target.value; invalidate(sel); render(); };
+      el.appendChild(r);
+    });
+  });
+  if(def.note){ const n=document.createElement('div'); n.className='grpNote'; n.textContent=def.note; el.appendChild(n); }
+}
+buildRail(); selectCat('transform');
 
 /* ---------- floating zoom bar ---------- */
 function updateZoomLabel(){ const z=document.getElementById('zoomVal'); if(z) z.textContent=Math.round(viewScale*100)+'%'; }
