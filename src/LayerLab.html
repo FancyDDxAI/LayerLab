@@ -290,6 +290,12 @@
   /* tool column beside the category rail */
   #toolcol{width:186px; flex:none; background:var(--surface); border-right:1px solid var(--line);
     display:flex; flex-direction:column; min-height:0}
+  #toolcol.hidden{display:none}
+  /* accordions that now own a whole panel shouldn't look collapsible */
+  .dpanel[data-p="props"] .accHead, .dpanel[data-p="presets"] .accHead, .dpanel[data-p="canvasbg"] .accHead{ pointer-events:none }
+  .dpanel[data-p="props"] .chev, .dpanel[data-p="presets"] .chev, .dpanel[data-p="canvasbg"] .chev{ display:none }
+  .dpanel[data-p="props"] .acc, .dpanel[data-p="presets"] .acc, .dpanel[data-p="canvasbg"] .acc{ border-bottom:0 }
+  .dpanel[data-p="presets"] .accHead .tinybtn{ pointer-events:auto }
   #tcHead{padding:15px 15px 10px; font:600 11.5px var(--ui); text-transform:uppercase; letter-spacing:1px; color:var(--muted); flex:none}
   #tcList{flex:1; min-height:0; overflow:auto; padding:0 9px 12px; display:flex; flex-direction:column; gap:4px}
   .tcBtn{width:100%; justify-content:flex-start; gap:10px; padding:11px 12px; font-size:13px;
@@ -3113,9 +3119,25 @@ document.getElementById('kofiBtn').onclick=()=>{ if(KOFI_URL) window.open(KOFI_U
 
 /* ================= 2a SHELL: menus · dock tabs · histogram · history · status ================= */
 // move the layer-specific accordions into the Adjust tab (they're authored inside #side)
-(function relocatePanels(){
+(function restructureDock(){
+  const dock=document.getElementById('dock');
+  const body=dock.querySelector('.dockBody');
   const adjustPanel=document.querySelector('.dpanel[data-p="adjust"]');
   ['props','adjust'].forEach(name=>{ const el=document.querySelector('.acc[data-acc="'+name+'"]'); if(el&&adjustPanel) adjustPanel.appendChild(el); });
+  // the tabs duplicated the left-hand categories — the left rail drives the dock now
+  const tabs=dock.querySelector('.dockTabs'); if(tabs) tabs.style.display='none';
+  // histogram is pinned above everything and never hides
+  const histo=document.getElementById('histoBox'); if(histo&&body) dock.insertBefore(histo, body);
+  // give the remaining accordions their own panels so each left option opens exactly one thing
+  const mk=(accName, panelName)=>{
+    const acc=document.querySelector('.acc[data-acc="'+accName+'"]'); if(!acc||!body) return;
+    acc.classList.add('open');
+    const p=document.createElement('div'); p.className='dpanel'; p.dataset.p=panelName;
+    p.appendChild(acc); body.appendChild(p);
+  };
+  mk('props','props'); mk('presets','presets'); mk('canvas','canvasbg');
+  // #side keeps the one-click effect buttons that showGroup() clones from — hidden, never shown
+  const eff=document.querySelector('.dpanel[data-p="effects"]'); if(eff) eff.classList.remove('on');
 })();
 
 /* menu bar */
@@ -3324,6 +3346,14 @@ const CATS=[
     { label:'Watermark',   ic:'mark',  act:'addMark' },
     { label:'Duplicate',   ic:'dup',   act:'dupBtn' },
   ]},
+  { id:'layers', name:'Layers', ic:'layers', tools:[
+    { label:'Layer list', ic:'layers',  panel:'layers' },
+    { label:'Properties', ic:'sliders', panel:'props' },
+    { label:'History',    ic:'reset',   panel:'history' },
+    { sep:true },
+    { label:'Saved looks', ic:'star',   panel:'presets' },
+    { label:'Background',  ic:'image',  panel:'canvasbg' },
+  ]},
   { id:'retouch', name:'Retouch', ic:'scissors', tools:[
     { label:'Remove background', ic:'scissors', act:'bgrBtn' },
     { label:'Censor brush',      ic:'censor',   tool:'censor' },
@@ -3347,6 +3377,14 @@ function buildRail(){
   paintIcons(rail);
 }
 function selectCat(id){
+  const col=document.getElementById('toolcol');
+  // clicking the category you're already on collapses the menu again
+  if(id===curCat && !col.classList.contains('hidden')){
+    col.classList.add('hidden');
+    document.querySelectorAll('#rail .railBtn').forEach(b=>b.classList.remove('on'));
+    render(); return;
+  }
+  col.classList.remove('hidden');
   curCat=id;
   document.querySelectorAll('#rail .railBtn').forEach(b=>b.classList.toggle('on', b.dataset.cat===id));
   const cat=CATS.find(c=>c.id===id); if(!cat) return;
@@ -3358,12 +3396,14 @@ function selectCat(id){
     b.className='tcBtn'; b.dataset.ic=t.ic; b.appendChild(document.createTextNode(t.label));
     if(t.tool) b.dataset.tool=t.tool;
     if(t.grp)  b.dataset.grp=t.grp;
+    if(t.panel) b.dataset.panel=t.panel;
     b.onclick=()=>{
       if(t.act){ const el=document.getElementById(t.act); if(el) el.click(); return; }
       document.querySelectorAll('#tcList .tcBtn').forEach(x=>x.classList.remove('on'));
       b.classList.add('on');
       if(t.tool){ curGrp=null; setTool(t.tool); showPanel('tool'); }
       else if(t.grp){ curGrp=t.grp; showGroup(t.grp, t.label, t.ic); showPanel('tool'); }
+      else if(t.panel){ curGrp=null; showPanel(t.panel); }
     };
     list.appendChild(b);
   });
@@ -3371,6 +3411,11 @@ function selectCat(id){
   // reflect whichever tool/group is already live
   const active=[...list.querySelectorAll('.tcBtn')].find(b=>b.dataset.tool===curTool || b.dataset.grp===curGrp);
   if(active) active.classList.add('on');
+  else {
+    // open the first safe option so the right side is never blank (never auto-fire an action)
+    const first=[...list.querySelectorAll('.tcBtn')].find(b=>b.dataset.tool||b.dataset.grp||b.dataset.panel);
+    if(first) first.click();
+  }
 }
 
 /* grouped adjustment + effect panels (so 22 sliders are never dumped in one list) */
